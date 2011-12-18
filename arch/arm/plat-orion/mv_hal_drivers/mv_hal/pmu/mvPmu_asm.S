@@ -532,6 +532,20 @@ ddfs_arbit_val:
  * Outputs:
  *    None
  **************************************************************/
+#if CONFIG_MACH_CUBOX
+ENTRY(mvPmuSramDeepIdleEnterFunc)
+	stmfd	sp!, {r0 - r10, lr}		@ save general regs
+	bl	mvPmuSramFlushCaches		@ Flush all caches back to DRAM
+	dsb
+	dmb
+	ldr	r0, pmu_ctrl_reg_virt
+	bl	mvPmuSramDdrSrEnter		@ Force DDR in SR mode
+	dsb
+	wfi
+	ldr	r0, pmu_ctrl_reg_virt
+	bl	mvPmuSramDdrSrExit
+ldmfd	sp!, {r0 - r10, pc}	@ restore regs and return
+#else
 ENTRY(mvPmuSramDeepIdleEnterFunc)
 	stmfd	sp!, {r4-r12, lr}		@ save general regs
 
@@ -599,7 +613,7 @@ die_leave_ddr_active:
 	str	r0, [r1]	
 	
 	bl	mvPmuSramWfi			@ Enter WFI to trigger PMU
-
+#endif
 die_vtp:
 	.word mvPmuSramVirt2Phys
 die_irb_reg:

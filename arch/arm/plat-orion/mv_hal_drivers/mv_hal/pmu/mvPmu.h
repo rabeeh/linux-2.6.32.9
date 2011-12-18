@@ -229,7 +229,7 @@ MV_VOID   mvPmuMcIdleTimeBaseValueSet	(MV_U32 timeBase);
 MV_VOID   mvPmuMcIdleIntMaskSet		(MV_BOOL hiIntEnable, MV_BOOL lowIntEnable);
 MV_U32 	  mvPmuMcIdleTimeGet		(void);
 MV_VOID   mvPmuMcIdleIntStatGet		(MV_BOOL *hiIntStat, MV_BOOL *lowIntStat);
-
+MV_VOID   mvPmuSelSDI			(MV_U8);
 #ifdef __cplusplus
 }
 #endif

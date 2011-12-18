@@ -127,8 +127,15 @@ static void pm_registers_action(enum pm_action_type type)
 }
 
 #ifdef CONFIG_PMU_PROC
+#define CPU_VSET 0x9
+#define CORE_VSET 0x9
+#define DDR_VSET 0xb
+#define SDI_CPU 10
+#define SDI_CORE 9
 extern MV_STATUS mvPmuDvs (MV_U32 pSet, MV_U32 vSet, MV_U32 rAddr, MV_U32 sAddr);
 extern MV_STATUS mvPmuCpuFreqScale (MV_PMU_CPU_SPEED cpuSpeed);
+extern MV_VOID mvPmuSramDeepIdle(MV_U32 ddrSelfRefresh);
+
 void dove_pm_cpuidle_deepidle (void);
 int pmu_proc_write(struct file *file, const char *buffer,unsigned long count,
 		     void *data)
@@ -140,28 +147,115 @@ int pmu_proc_write(struct file *file, const char *buffer,unsigned long count,
 	int dummy;
 	MV_U32 reg;
 	MV_STATUS stat;
-
-	str = "dvs ";
+	str = "poweroff";
 	if(!strncmp(buffer+len, str,strlen(str))) {
+		unsigned int sb,nb;
+		printk ("Powering off system\n");
+		sb = ioremap(0xf1000000,0x00100000);
+		if (!sb) {
+			printk ("Can't remap sb registers\n");
+			return 0;
+		}
+		printk ("Regsiters is at 0x%x\n",sb);
+		nb = ioremap(0xf1800000,0x00100000);
+		if (!nb) {
+			printk ("Can't remap nb registers\n");
+			return 0;
+		}
+		local_irq_save(ints);
+		// Start 407mA
+		writel (0x009B1215, sb+0x0a2050); // eSata - 40mA
+		writel (0x0003007f, sb+0x0d0058); // PEX clk - 10mA
+		writel (0x00010800, sb+0x072004); // SMI power down phy --> ~20mA when previously 100mA
+		msleep(100);
+		writel (0x00000002, sb+0x0720b0); // gig digital unit down Dangerous - will hang chip
+		writel (0x0003007b, sb+0x0d0058); // PEX clk - 10mA + gigE ios
+		{ // GPU off - 30mA
+			/* enable isolators */
+			reg = MV_REG_READ(PMU_ISO_CTRL_REG);
+			reg &= ~PMU_ISO_GPU_MASK;
+			MV_REG_WRITE(PMU_ISO_CTRL_REG, reg);
+			/* reset unit */
+			reg = MV_REG_READ(PMU_SW_RST_CTRL_REG);
+			reg &= ~PMU_SW_RST_GPU_MASK;
+			MV_REG_WRITE(PMU_SW_RST_CTRL_REG, reg);
+			/* power off */
+			reg = MV_REG_READ(PMU_PWR_SUPLY_CTRL_REG);
+			reg |= PMU_PWR_GPU_PWR_DWN_MASK;
+			MV_REG_WRITE(PMU_PWR_SUPLY_CTRL_REG, reg);
+		}
+		reg = readl(sb + 0x0d0208);
+		reg &= ~0xf00;
+		reg |= 0x100; // Internall no select, keeps it almost floating
+		writel(reg, sb + 0x0d0208);
+		reg = readl(sb + 0x0d0400);
+		reg |= (1<< 18);
+		writel(reg, sb + 0x0d0400);
+	
+	
+		// Add CPU DFS to 400
+		// Add CPU voltage to -2.5
+		// Add CORE voltage to -10
+		// Add DDR voltage to -10
+		
+		// Here reached ~300mA
+		writel(0xf0002000, nb+0x0200fc); // LCD PWM
+		writel(0xff000160, sb+0x050400); // USB 0 phy shutdown
+		writel(0xff000160, sb+0x050400); // USB 1 phy shutdown
+		writel(0xff3800c4, sb+0x0d0038); // Clock gating of unused south bridge units
+
+		// Disable all interrupts besides uart0
+		mc = MV_REG_READ(CPU_MAIN_IRQ_MASK_REG);
+		mc2 = MV_REG_READ(CPU_MAIN_IRQ_MASK_HIGH_REG);
+		MV_REG_WRITE(CPU_MAIN_IRQ_MASK_REG, 0x80); /* disable all interrupts except UART0 */
+		MV_REG_WRITE(CPU_MAIN_IRQ_MASK_HIGH_REG, 0x0);
+	
+		mvPmuSramDeepIdle(0);
+//		__asm__ __volatile__("wfi\n");
+		MV_REG_WRITE(CPU_MAIN_IRQ_MASK_REG, mc);
+		MV_REG_WRITE(CPU_MAIN_IRQ_MASK_HIGH_REG, mc2);
+		local_irq_restore(ints);			
+	}
+		
+	str = "sdi ";
+	if(!strncmp(buffer+len, str,strlen(str))) {
+		len += strlen(str);
+		str = "close";
+		if(!strncmp(buffer+len, str,strlen(str))) {
+			printk ("Closing interface\n");
+			mvPmuSelSDI(0xff);
+		}
+		str = "cpu";
+		if(!strncmp(buffer+len, str,strlen(str))) {
+			mvPmuSelSDI(SDI_CPU);
+		}
+		str = "core";
+		if(!strncmp(buffer+len, str,strlen(str))) {
+			mvPmuSelSDI(SDI_CORE);
+		}
+	}
+	str = "coredvs ";
+	if(!strncmp(buffer+len, str,strlen(str))) {
+		mvPmuSelSDI(SDI_CORE);
 		len += strlen(str);
 		str = "+10";
 		if(!strncmp(buffer+len, str,strlen(str))) {
-			if (mvPmuDvs(15, 0x8, 0x2, 0x5) != MV_OK)
+			if (mvPmuDvs(15, CORE_VSET, 0x2, 0x5) != MV_OK)
 				printk(">>>>>>>>>>>>> FAILED\n");
 		}
 		str = "+7.5";
 		if(!strncmp(buffer+len, str,strlen(str))) {
-			if (mvPmuDvs(14, 0x8, 0x2, 0x5) != MV_OK)
+			if (mvPmuDvs(14, CORE_VSET, 0x2, 0x5) != MV_OK)
 				printk(">>>>>>>>>>>>> FAILED\n");
 		}
 		str = "+5";
 		if(!strncmp(buffer+len, str,strlen(str))) {
-			if (mvPmuDvs(13, 0x8, 0x2, 0x5) != MV_OK)
+			if (mvPmuDvs(13, CORE_VSET, 0x2, 0x5) != MV_OK)
 				printk(">>>>>>>>>>>>> FAILED\n");
 		}
 		str = "+2.5";
 		if(!strncmp(buffer+len, str,strlen(str))) {
-			if (mvPmuDvs(12, 0x8, 0x2, 0x5) != MV_OK)
+			if (mvPmuDvs(12, CORE_VSET, 0x2, 0x5) != MV_OK)
 				printk(">>>>>>>>>>>>> FAILED\n");
 		}
 		str = "0";
@@ -171,35 +265,128 @@ int pmu_proc_write(struct file *file, const char *buffer,unsigned long count,
 		}
 		str = "-2.5";
 		if(!strncmp(buffer+len, str,strlen(str))) {
-			if (mvPmuDvs(11, 0x8, 0x2, 0x5) != MV_OK)
+			if (mvPmuDvs(11, CORE_VSET, 0x2, 0x5) != MV_OK)
 				printk(">>>>>>>>>>>>> FAILED\n");
 		}
 		str = "-5";
 		if(!strncmp(buffer+len, str,strlen(str))) {
-			if (mvPmuDvs(10, 0x8, 0x2, 0x5) != MV_OK)
+			if (mvPmuDvs(10, CORE_VSET, 0x2, 0x5) != MV_OK)
 				printk(">>>>>>>>>>>>> FAILED\n");
 		}
 		str = "-7.5";
 		if(!strncmp(buffer+len, str,strlen(str))) {
-			if (mvPmuDvs(9, 0x8, 0x2, 0x5) != MV_OK)
+			if (mvPmuDvs(9, CORE_VSET, 0x2, 0x5) != MV_OK)
 				printk(">>>>>>>>>>>>> FAILED\n");
 		}
 		str = "-10";
 		if(!strncmp(buffer+len, str,strlen(str))) {
-			if (mvPmuDvs(8, 0x8, 0x2, 0x5) != MV_OK)
+			if (mvPmuDvs(8, CORE_VSET, 0x2, 0x5) != MV_OK)
 				printk(">>>>>>>>>>>>> FAILED\n");
 		}
-		str = "1.2";
+		goto done;
+	}
+	str = "ddrdvs ";
+	if(!strncmp(buffer+len, str,strlen(str))) {
+		mvPmuSelSDI(SDI_CORE);
+		len += strlen(str);
+		str = "+10";
 		if(!strncmp(buffer+len, str,strlen(str))) {
-			if (mvPmuDvs(0, 0x9, 0x2, 0x5) != MV_OK)
+			if (mvPmuDvs(15, DDR_VSET, 0x0, 0x5) != MV_OK)
 				printk(">>>>>>>>>>>>> FAILED\n");
 		}
-		str = "1.0";
+		str = "+7.5";
 		if(!strncmp(buffer+len, str,strlen(str))) {
-			if (mvPmuDvs(0, 0x8, 0x2, 0x5) != MV_OK)
+			if (mvPmuDvs(14, DDR_VSET, 0x0, 0x5) != MV_OK)
 				printk(">>>>>>>>>>>>> FAILED\n");
 		}
-
+		str = "+5";
+		if(!strncmp(buffer+len, str,strlen(str))) {
+			if (mvPmuDvs(13, DDR_VSET, 0x0, 0x5) != MV_OK)
+				printk(">>>>>>>>>>>>> FAILED\n");
+		}
+		str = "+2.5";
+		if(!strncmp(buffer+len, str,strlen(str))) {
+			if (mvPmuDvs(12, DDR_VSET, 0x0, 0x5) != MV_OK)
+				printk(">>>>>>>>>>>>> FAILED\n");
+		}
+		str = "0";
+		if(!strncmp(buffer+len, str,strlen(str))) {
+			if (mvPmuDvs(0, 0, 0x0, 0x5) != MV_OK)
+				printk(">>>>>>>>>>>>> FAILED\n");
+		}
+		str = "-2.5";
+		if(!strncmp(buffer+len, str,strlen(str))) {
+			if (mvPmuDvs(11, DDR_VSET, 0x0, 0x5) != MV_OK)
+				printk(">>>>>>>>>>>>> FAILED\n");
+		}
+		str = "-5";
+		if(!strncmp(buffer+len, str,strlen(str))) {
+			if (mvPmuDvs(10, DDR_VSET, 0x0, 0x5) != MV_OK)
+				printk(">>>>>>>>>>>>> FAILED\n");
+		}
+		str = "-7.5";
+		if(!strncmp(buffer+len, str,strlen(str))) {
+			if (mvPmuDvs(9, DDR_VSET, 0x0, 0x5) != MV_OK)
+				printk(">>>>>>>>>>>>> FAILED\n");
+		}
+		str = "-10";
+		if(!strncmp(buffer+len, str,strlen(str))) {
+			if (mvPmuDvs(8, DDR_VSET, 0x0, 0x5) != MV_OK)
+				printk(">>>>>>>>>>>>> FAILED\n");
+		}
+		goto done;
+	}
+	str = "dvs ";
+	if(!strncmp(buffer+len, str,strlen(str))) {
+		printk ("Selecting SDI_CPU\n");
+		mvPmuSelSDI(SDI_CPU);
+		len += strlen(str);
+		str = "+10";
+		if(!strncmp(buffer+len, str,strlen(str))) {
+			if (mvPmuDvs(15, CPU_VSET, 0x2, 0x5) != MV_OK)
+				printk(">>>>>>>>>>>>> FAILED\n");
+		}
+		str = "+7.5";
+		if(!strncmp(buffer+len, str,strlen(str))) {
+			if (mvPmuDvs(14, CPU_VSET, 0x2, 0x5) != MV_OK)
+				printk(">>>>>>>>>>>>> FAILED\n");
+		}
+		str = "+5";
+		if(!strncmp(buffer+len, str,strlen(str))) {
+			if (mvPmuDvs(13, CPU_VSET, 0x2, 0x5) != MV_OK)
+				printk(">>>>>>>>>>>>> FAILED\n");
+		}
+		str = "+2.5";
+		if(!strncmp(buffer+len, str,strlen(str))) {
+			if (mvPmuDvs(12, CPU_VSET, 0x2, 0x5) != MV_OK)
+				printk(">>>>>>>>>>>>> FAILED\n");
+		}
+		str = "0";
+		if(!strncmp(buffer+len, str,strlen(str))) {
+			if (mvPmuDvs(0, 0, 0x2, 0x5) != MV_OK)
+				printk(">>>>>>>>>>>>> FAILED\n");
+		}
+		str = "-2.5";
+		if(!strncmp(buffer+len, str,strlen(str))) {
+			printk ("dvs -2.5\n");
+			if (mvPmuDvs(11, CPU_VSET, 0x2, 0x5) != MV_OK)
+				printk(">>>>>>>>>>>>> FAILED\n");
+		}
+		str = "-5";
+		if(!strncmp(buffer+len, str,strlen(str))) {
+			if (mvPmuDvs(10, CPU_VSET, 0x2, 0x5) != MV_OK)
+				printk(">>>>>>>>>>>>> FAILED\n");
+		}
+		str = "-7.5";
+		if(!strncmp(buffer+len, str,strlen(str))) {
+			if (mvPmuDvs(9, CPU_VSET, 0x2, 0x5) != MV_OK)
+				printk(">>>>>>>>>>>>> FAILED\n");
+		}
+		str = "-10";
+		if(!strncmp(buffer+len, str,strlen(str))) {
+			if (mvPmuDvs(8, CPU_VSET, 0x2, 0x5) != MV_OK)
+				printk(">>>>>>>>>>>>> FAILED\n");
+		}
 		goto done;
 	}
 
@@ -567,6 +754,8 @@ int pmu_proc_read(char* page, char** start, off_t off, int count,int* eof,
 
 	len += sprintf(page+len,"PM Proc debug shell:\n");
 	len += sprintf(page+len,"   dvs <+10|+7.5|+5|+2.5|0|-2.5|-5|-7.5|-10>\n");
+	len += sprintf(page+len,"   coredvs <+10|+7.5|+5|+2.5|0|-2.5|-5|-7.5|-10>\n");
+	len += sprintf(page+len,"   ddrdvs <+10|+7.5|+5|+2.5|0|-2.5|-5|-7.5|-10>\n");
 	len += sprintf(page+len,"   cpudfs <turbo|ddr>\n");
 	len += sprintf(page+len,"   sysdfs <cpu> <l2> <ddr>\n");
 	len += sprintf(page+len,"   freqs\n");

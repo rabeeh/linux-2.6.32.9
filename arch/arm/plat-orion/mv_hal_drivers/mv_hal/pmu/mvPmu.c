@@ -263,6 +263,41 @@ MV_STATUS mvPmuInit (MV_PMU_INFO * pmu)
 	return mvPmuSramInit(pmu->ddrTermGpioNum, cke_mpp_num);
 }
 
+/* Select SDI output to control */
+MV_VOID mvPmuSelSDI (MV_U8 select)
+{
+	MV_U32 reg0, regw0, reg1, regw1;
+	int i;
+	regw0 = reg0 = MV_REG_READ(PMU_SIG_SLCT_CTRL_0_REG);
+	for (i = 0 ; i < 8 ; i++ ) {
+		if ((reg0 & (0xf << (i*4))) == (PMU_SIGNAL_SDI << (i*4))) {
+			regw0 &= ~(0xf << (i*4));
+			regw0 |= PMU_SIGNAL_0 << (i*4);
+		}
+	}
+	regw1 = reg1 = MV_REG_READ(PMU_SIG_SLCT_CTRL_1_REG);
+	for (i = 0 ; i < 8 ; i++ ) {
+		if ((reg1 & (0xf << (i*4))) == (PMU_SIGNAL_SDI << (i*4))) {
+			regw1 &= ~(0xf << (i*4));
+			regw1 |= PMU_SIGNAL_0 << (i*4);
+		}
+	}
+	if (select < 8) 
+		regw0 = regw0 | (PMU_SIGNAL_SDI << (select * 4));
+	if ((select >=8) && (select < 16)) 
+	regw1 = regw1 | (PMU_SIGNAL_SDI << ((select-8) * 4));
+done:	printk (KERN_INFO "%s - New regs 0x%x 0x%x\n",__FUNCTION__,regw0,regw1);
+	if (regw0 != reg0) {
+		printk (KERN_INFO "Writing 0x%x to reg0\n",regw0);
+		MV_REG_WRITE(PMU_SIG_SLCT_CTRL_0_REG, regw0);
+	}
+	if (regw1 != reg1)
+	{
+		printk (KERN_INFO "Writing 0x%x to reg1\n",regw1);
+		MV_REG_WRITE(PMU_SIG_SLCT_CTRL_1_REG, regw1);
+	}
+}
+
 /*******************************************************************************
 * mvPmuDeepIdle - Power down the CPU and enter WFI. This api blocks untill
 *                receiving an interrupt, which wakes up the CPU and this
