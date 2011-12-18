@@ -332,6 +332,7 @@ static int dovefb_ovly_ioctl(struct fb_info *fi, unsigned int cmd,
 	int vmode = 0;
 	int gfx_on = 1;
 	int vid_on = 1;
+	int interpolation = 0;
 
 	switch (cmd) {
 	case DOVEFB_IOCTL_WAIT_VSYNC:
@@ -631,6 +632,31 @@ static int dovefb_ovly_ioctl(struct fb_info *fi, unsigned int cmd,
 
 		break;
 		}
+	case DOVEFB_IOCTL_NEXT_FRAME_PRESENT:
+		{
+		unsigned int phy_addr[3];
+		mutex_lock(&dfli->access_ok);
+		if (copy_from_user(&phy_addr, argp, 3*sizeof(unsigned int))) {
+		mutex_unlock(&dfli->access_ok);
+			return -EFAULT;
+		}
+		mutex_unlock(&dfli->access_ok);
+		dfli->vid_ovly_phys_addr_y = phy_addr[0];
+		dfli->vid_ovly_phys_addr_u = phy_addr[1];
+		dfli->vid_ovly_phys_addr_v = phy_addr[2];
+		break;
+		}
+	case DOVEFB_IOCTL_SET_INTERPOLATION_MODE:
+		/*
+		 * Get data from user space.
+		 */
+		if (copy_from_user(&interpolation, argp, sizeof(interpolation)))
+			return -EFAULT;
+		if ((interpolation == 0) || (interpolation == 3))
+			writel(CFG_VSC_LINEAR(interpolation) | (readl(dfli->reg_base +
+			SPU_IOPAD_CONTROL) & !CFG_VSC_LINEAR_MASK),
+			dfli->reg_base + SPU_IOPAD_CONTROL);
+		break;
 	default:
 		pr_debug("ioctl_ovly(0x%x) No match.\n", cmd);
 		break;
@@ -780,12 +806,14 @@ static int dovefb_ovly_open(struct fb_info *fi, int user)
 	clearFreeBuf(filterBufList, RESET_BUF);
 	clearFreeBuf(freeBufList, RESET_BUF|FREE_ENTRY);
 	mutex_unlock(&dfli->access_ok);
+	dfli->vid_ovly_phys_addr_y = 0;
 
 	return 0;
 }
 
 static int dovefb_release(struct fb_info *fi, int user)
 {
+	u32 x;
 	struct dovefb_layer_info *dfli = fi->par;
 
 	/* Disable all interrupts. */
@@ -796,6 +824,9 @@ static int dovefb_release(struct fb_info *fi, int user)
 	clearFreeBuf(filterBufList, RESET_BUF);
 	clearFreeBuf(freeBufList, RESET_BUF|FREE_ENTRY);
 	mutex_unlock(&dfli->access_ok);
+	x = readl(dfli->reg_base + LCD_SPU_DMA_CTRL0) &
+		~CFG_DMA_ENA_MASK;
+	writel(x, dfli->reg_base + LCD_SPU_DMA_CTRL0);
 	return 0;
 }
 
@@ -807,6 +838,16 @@ static int dovefb_switch_buff(struct fb_info *fi)
 	unsigned long startaddr;
 	int fbid;
 
+	/* First check if we have a faster path */
+	if (dfli->vid_ovly_phys_addr_y)
+	{
+		/* Found a frame that should be presented now */
+		writel(dfli->vid_ovly_phys_addr_y, dfli->reg_base + LCD_SPU_DMA_START_ADDR_Y0);
+		writel(dfli->vid_ovly_phys_addr_u, dfli->reg_base + LCD_SPU_DMA_START_ADDR_U0);
+		writel(dfli->vid_ovly_phys_addr_v, dfli->reg_base + LCD_SPU_DMA_START_ADDR_V0);
+		dfli->vid_ovly_phys_addr_y = 0;
+		return 0;
+	}
 	/*
 	 * Find the latest frame.
 	 */

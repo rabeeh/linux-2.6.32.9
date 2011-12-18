@@ -16,6 +16,7 @@
  * 1. Adapted from:  linux/drivers/video/skeletonfb.c
  * 2. Merged code base from: linux/drivers/video/dovefb.c (Lennert Buytenhek)
  */
+#undef DEBUG
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/kernel.h>
@@ -313,7 +314,15 @@ static void set_dumb_panel_control(struct fb_info *fi, int gpio_only)
 		x |= (fi->var.sync & FB_SYNC_COMP_HIGH_ACT) ? 0x00000020 : 0;
 		x |= dmi->invert_pix_val_ena ? 0x00000010 : 0;
 		x |= (fi->var.sync & FB_SYNC_VERT_HIGH_ACT) ? 0 : 0x00000008;
-		x |= (fi->var.sync & FB_SYNC_HOR_HIGH_ACT) ? 0 : 0x00000004;
+#if 1 /* Weired workaround. This bit shouldn't be set. Rabeeh - recheck after EDID done */
+		/* For now, if it's 1080p or 720 then don't set HOR_HIGH_ACT */
+		if (((fi->var.xres == 1920) && (fi->var.yres == 1080)) ||
+		    ((fi->var.xres == 1280) && (fi->var.yres == 720)))
+			/* Do nothing */
+			x |= (fi->var.sync & FB_SYNC_HOR_HIGH_ACT) ? 0 : 0x00000000;
+		else
+			x |= (fi->var.sync & FB_SYNC_HOR_HIGH_ACT) ? 0 : 0x00000004;
+#endif
 		x |= dmi->invert_pixclock ? 0x00000002 : 0;
 	}
 
@@ -487,10 +496,10 @@ static u8 fake_edid[] = {
 	0x1E, 0x14, 0x01, 0x03, 0x80, 0x34, 0x20, 0x78, 0x22, 0xFE, 0x25, 0xA8, 0x53, 0x37, 0xAE, 0x24,
 	0x11, 0x50, 0x54, 0x23, 0x09, 0x00, 0xA9, 0x40, 0x81, 0x80, 0x81, 0x40, 0x81, 0x00, 0x81, 0xC0,
 	0xB3, 0x00, 0x71, 0x40, 0x95, 0x00, 0x28, 0x3C, 0x80, 0xA0, 0x70, 0xB0, 0x23, 0x40, 0x30, 0x20,
-	0x36, 0x00, 0x06, 0x44, 0x21, 0x00, 0x00, 0x1A, 0x02, 0x3A, 0x80, 0x18, 0x71, 0x38, 0x2D, 0x40,
+	0x36, 0x00, 0x06, 0x44, 0x21, 0x00, 0x00, 0x1a, 0x02, 0x3A, 0x80, 0x18, 0x71, 0x38, 0x2D, 0x40,
 	0x58, 0x2C, 0x45, 0x00, 0x06, 0x24, 0x21, 0x00, 0x00, 0x1A, 0x7F, 0x21, 0x56, 0xAA, 0x51, 0x00,
 	0x1E, 0x30, 0x46, 0x8F, 0x33, 0x00, 0x71, 0xD0, 0x10, 0x00, 0x00, 0x1A, 0xA9, 0x1A, 0x00, 0xA0,
-	0x50, 0x00, 0x16, 0x30, 0x30, 0x20, 0x37, 0x00, 0x5A, 0xD0, 0x10, 0x00, 0x00, 0x1A, 0x01, 0x2B,
+	0x50, 0x00, 0x16, 0x30, 0x30, 0x20, 0x37, 0x00, 0x5A, 0xD0, 0x10, 0x00, 0x00, 0x1A, 0x01, 0x2b,
 	/* extended block 1. */
 	0x02, 0x01, 0x04, 0x00, 0x70, 0x11, 0x00, 0xB0, 0x40, 0x58, 0x14, 0x20, 0x26, 0x64, 0x84, 0x00,
 	0x2C, 0xDE, 0x10, 0x00, 0x00, 0x1A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -532,6 +541,9 @@ static u8 *make_analog_fake_edid(void)
 
 	return edid_block;
 }
+#ifdef CONFIG_TDA19988
+extern	int configure_tx_inout(int x, int y, int interlaced, int hz);
+#endif	
 
 static int dovefb_gfx_set_par(struct fb_info *fi)
 {
@@ -650,6 +662,13 @@ static int dovefb_gfx_set_par(struct fb_info *fi)
 		}
 	}
 #endif
+#ifdef CONFIG_TDA19988
+	printk (KERN_INFO "Setting HDMI TX resolution to %dx%d%c @ %d\n",m->xres,m->yres,(m->vmode & FB_VMODE_INTERLACED)?'i':'p',m->refresh);
+	if (!configure_tx_inout(m->xres, m->yres, (m->vmode & FB_VMODE_INTERLACED)? 1 : 0, m->refresh)) {
+		printk (KERN_ERR "Setting HDMI TX mode failed\n");
+	}
+	
+#endif	
 
 	return 0;
 }
@@ -1197,10 +1216,28 @@ static u8 *pull_edid_from_i2c(int busid, int addr)
 }
 #endif
 
+#ifdef CONFIG_TDA19988
+extern char *tda19988_get_edid(int *num_of_blocks);
+#endif
 static u8 *dove_read_edid(struct fb_info *fi, struct dovefb_mach_info *dmi)
 {
 	char *edid_data = NULL;
-
+#ifdef CONFIG_TDA19988
+	int num_of_blocks;
+	char *nxp_edid;
+	nxp_edid = tda19988_get_edid(&num_of_blocks);
+	if (nxp_edid == NULL) /* EDID not ready */
+		return NULL;
+#if 0
+	printk ("Got number of blocks %d (pointer at %p)\n",num_of_blocks,edid_data);
+	{ int i;
+	for (i = 0 ; i < num_of_blocks*EDID_LENGTH ; i ++) {
+		printk ("%03d : %c\n",i,edid_data[i]);
+	}}
+#endif
+	edid_data = kmalloc (num_of_blocks*EDID_LENGTH, GFP_KERNEL);
+	memcpy (edid_data, nxp_edid, num_of_blocks*EDID_LENGTH);
+#else
 	if (-1 == dmi->ddc_i2c_adapter)
 		return edid_data;
 
@@ -1213,6 +1250,7 @@ static u8 *dove_read_edid(struct fb_info *fi, struct dovefb_mach_info *dmi)
 		edid_data = pull_edid_from_i2c(dmi->ddc_i2c_adapter_2nd,
 			dmi->ddc_i2c_address_2nd);
 	}
+#endif
 #endif
 	return edid_data;
 }

@@ -406,6 +406,8 @@
 
 /* LCD I/O Pads Control Register */
 #define SPU_IOPAD_CONTROL			0x01BC
+#define     CFG_VSC_LINEAR(vm)			(vm<<18)        /* gfx */
+#define     CFG_VSC_LINEAR_MASK			0x000c0000
 #define     CFG_GRA_VM_ENA(vm)			(vm<<15)        /* gfx */
 #define     CFG_GRA_VM_ENA_MASK			0x00008000
 #define     CFG_DMA_VM_ENA(vm)			(vm<<13)	/* video */

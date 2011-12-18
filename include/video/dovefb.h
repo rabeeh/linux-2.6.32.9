@@ -98,6 +98,10 @@
 #define DOVEFB_IOCTL_GET_EDID_DATA		_IO(DOVEFB_IOC_MAGIC, 24)
 #define DOVEFB_IOCTL_SET_EDID_INTERVAL		_IO(DOVEFB_IOC_MAGIC, 25)
 
+/* Video overlay ioctls */
+#define DOVEFB_IOCTL_NEXT_FRAME_PRESENT		_IO(DOVEFB_IOC_MAGIC, 26)
+#define DOVEFB_IOCTL_SET_INTERPOLATION_MODE	_IO(DOVEFB_IOC_MAGIC, 27)
+
 /* clear framebuffer: Makes resolution or color space changes look nicer */
 #define FBIO_CLEAR_FRAMEBUFFER			_IO(FB_IOC_MAGIC, 19)
 
@@ -350,6 +354,10 @@ struct dovefb_layer_info {
 	struct mutex		access_ok;
 	struct _sOvlySurface	surface;
 	struct _sColorKeyNAlpha ckey_alpha;
+	/* Following used to bypass vide frame queuing */
+	unsigned int		vid_ovly_phys_addr_y;
+	unsigned int		vid_ovly_phys_addr_u;
+	unsigned int		vid_ovly_phys_addr_v;
 
 	unsigned char		*hwc_buf;
 	unsigned int		pseudo_palette[16];
