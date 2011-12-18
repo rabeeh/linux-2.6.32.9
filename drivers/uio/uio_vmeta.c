@@ -44,7 +44,7 @@
 #define UIO_VMETA_BUS_IRQ_NAME  UIO_VMETA_NAME"-bus"
 #define UIO_VMETA_VERSION	"build-004"
 
-#define VMETA_DEBUG 0
+#define VMETA_DEBUG 1 
 
 #if VMETA_DEBUG
 #define vmeta_print printk
@@ -190,7 +190,6 @@ static int vmeta_pm_event(struct notifier_block *notifier, unsigned long val, vo
 	// PM_POST_SUSPEND		0x0004 /* Suspend finished */
 	// PM_RESTORE_PREPARE	0x0005 /* Going to restore a saved image */
 	// PM_POST_RESTORE		0x0006 /* Restore failed */
-
 	uio_event_notify(&vmeta_priv_vi->uio_info);
 
 	switch(val) {
@@ -291,15 +290,14 @@ int vmeta_priv_unlock(struct vmeta_instance *vi)
 
 int vmeta_power_on(struct vmeta_instance* vi)
 {
+	return 0; // Rabeeh - hack
 	down_read(&vi->sem);
 	if(vi->power_status ==1) {
 		up_read(&vi->sem);
 		return 0;
 	}
-
 	clk_enable(vi->clk);
 	vi->power_status =1;
-
 	up_read(&vi->sem);
 	return 0;
 }
@@ -329,6 +327,7 @@ int vmeta_clk_on(struct vmeta_instance *vi)
 	clk_enable(vi->clk);
 
 	vi->clk_status = 2;
+	vi->power_status = 1; // Rabeeh - hack
 	up_read(&vi->sem);
 	return 0;
 }
@@ -356,7 +355,6 @@ int vmeta_clk_switch(struct vmeta_instance *vi, unsigned long clk_flag)
 int vmeta_turn_on(struct vmeta_instance *vi)
 {
 	int ret;
-
 	ret = vmeta_clk_on(vi);
 	if(ret) {
 		return -1;
@@ -372,6 +370,7 @@ int vmeta_turn_on(struct vmeta_instance *vi)
 
 int vmeta_power_off(struct vmeta_instance *vi)
 {
+	return 0; // Rabeeh - hack
 	down_read(&vi->sem);
 	if(vi->power_status ==0) {
 		up_read(&vi->sem);
@@ -409,6 +408,7 @@ int vmeta_clk_off(struct vmeta_instance *vi)
 	unset_dvfm_constraint(vi);
 #endif
 	vi->clk_status = 0;
+	vi->power_status = 0; // Rabeeh - hack
 	up_read(&vi->sem);
 	return 0;
 }
@@ -566,7 +566,6 @@ static int vmeta_ioctl(struct uio_info *info, unsigned int cmd, unsigned long ar
 {
 	int ret = 0;
 	struct vmeta_instance *priv = info->priv;
-
 	switch(cmd) {
 		case VMETA_CMD_POWER_ON:
 			ret = vmeta_power_on(priv);
@@ -641,7 +640,6 @@ static int vmeta_probe(struct platform_device *pdev)
 	dma_addr_t mem_dma_addr;
 	void *mem_vir_addr;
 #endif
-
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (res == NULL) {
 		printk(KERN_ERR "vmeta_probe: no memory resources given\n");
@@ -811,7 +809,6 @@ static int vmeta_probe(struct platform_device *pdev)
 
 	// init a wait queue for pm event sync
 	init_waitqueue_head(&vi->wait);
-
 	return 0;
 
 out_free:

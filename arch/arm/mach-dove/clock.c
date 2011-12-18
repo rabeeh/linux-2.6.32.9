@@ -976,6 +976,7 @@ static struct clk clk_gpu = {
 
 static struct clk clk_vpu = {
 	.ops	= &vpu_clk_ops,
+	.usecount = 0,
 };
 
 static struct clk clk_axi = {
