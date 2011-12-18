@@ -121,7 +121,6 @@ logo_*.c
 logo_*_clut224.c
 logo_*_mono.c
 lxdialog
-mach-types
 mach-types.h
 machtypes.h
 map

@@ -164,10 +164,24 @@
 # define v4wb_always_flags	(-1UL)
 #endif
 
+#ifdef CONFIG_CACHE_TAUROS2
+#ifdef CONFIG_MRV_PTE_IN_L2
 #define v6wbi_tlb_flags (TLB_WB | TLB_DCLEAN | TLB_BTB | \
 			 TLB_V6_I_FULL | TLB_V6_D_FULL | \
 			 TLB_V6_I_PAGE | TLB_V6_D_PAGE | \
 			 TLB_V6_I_ASID | TLB_V6_D_ASID)
+#else /* Non Table walking on L2 */
+#define v6wbi_tlb_flags (TLB_WB | TLB_DCLEAN | TLB_BTB | TLB_L2CLEAN_FR | \
+			 TLB_V6_I_FULL | TLB_V6_D_FULL |	\
+			 TLB_V6_I_PAGE | TLB_V6_D_PAGE |	\
+			 TLB_V6_I_ASID | TLB_V6_D_ASID)
+#endif
+#else
+#define v6wbi_tlb_flags (TLB_WB | TLB_DCLEAN | TLB_BTB | \
+			 TLB_V6_I_FULL | TLB_V6_D_FULL |	\
+			 TLB_V6_I_PAGE | TLB_V6_D_PAGE |	\
+			 TLB_V6_I_ASID | TLB_V6_D_ASID)
+#endif
 
 #ifdef CONFIG_CPU_TLB_V6
 # define v6wbi_possible_flags	v6wbi_tlb_flags
@@ -186,8 +200,13 @@
 #define v7wbi_tlb_flags (TLB_WB | TLB_DCLEAN | TLB_BTB | \
 			 TLB_V7_UIS_FULL | TLB_V7_UIS_PAGE | TLB_V7_UIS_ASID)
 #else
+#if defined(CONFIG_CACHE_TAUROS2) && !defined(CONFIG_MRV_PTE_IN_L2)
+#define v7wbi_tlb_flags (TLB_WB | TLB_DCLEAN | TLB_BTB | TLB_L2CLEAN_FR |\
+			 TLB_V6_U_FULL | TLB_V6_U_PAGE | TLB_V6_U_ASID)
+#else
 #define v7wbi_tlb_flags (TLB_WB | TLB_DCLEAN | TLB_BTB | \
 			 TLB_V6_U_FULL | TLB_V6_U_PAGE | TLB_V6_U_ASID)
+#endif /* CONFIG_CACHE_TAUROS2 && .. */
 #endif
 
 #ifdef CONFIG_CPU_TLB_V7
@@ -210,6 +229,7 @@
 #ifndef __ASSEMBLY__
 
 #include <linux/sched.h>
+
 
 struct cpu_tlb_fns {
 	void (*flush_user_range)(unsigned long, unsigned long, struct vm_area_struct *);
@@ -375,6 +395,7 @@ static inline void local_flush_tlb_mm(struct mm_struct *mm)
 		/* flush the branch target cache */
 		asm("mcr p15, 0, %0, c7, c5, 6" : : "r" (zero) : "cc");
 		dsb();
+		isb();
 	}
 }
 
@@ -402,19 +423,27 @@ local_flush_tlb_page(struct vm_area_struct *vma, unsigned long uaddr)
 			asm("mcr p15, 0, %0, c8, c5, 0" : : "r" (zero) : "cc");
 	}
 
+#ifdef CONFIG_CPU_PJ4_ERRATA_4315
+	if (tlb_flag(TLB_V6_U_PAGE)) {
+		unsigned long asid;
+		asid  = ASID(vma->vm_mm);
+		asm("mcr p15, 0, %0, c8, c7, 2" : : "r" (asid) : "cc");
+	}
+#else
 	if (tlb_flag(TLB_V6_U_PAGE))
 		asm("mcr p15, 0, %0, c8, c7, 1" : : "r" (uaddr) : "cc");
+#endif
 	if (tlb_flag(TLB_V6_D_PAGE))
 		asm("mcr p15, 0, %0, c8, c6, 1" : : "r" (uaddr) : "cc");
 	if (tlb_flag(TLB_V6_I_PAGE))
 		asm("mcr p15, 0, %0, c8, c5, 1" : : "r" (uaddr) : "cc");
 	if (tlb_flag(TLB_V7_UIS_PAGE))
 		asm("mcr p15, 0, %0, c8, c3, 1" : : "r" (uaddr) : "cc");
-
 	if (tlb_flag(TLB_BTB)) {
 		/* flush the branch target cache */
 		asm("mcr p15, 0, %0, c7, c5, 6" : : "r" (zero) : "cc");
 		dsb();
+		isb();
 	}
 }
 
@@ -438,9 +467,14 @@ static inline void local_flush_tlb_kernel_page(unsigned long kaddr)
 		asm("mcr p15, 0, %0, c8, c5, 1" : : "r" (kaddr) : "cc");
 	if (!tlb_flag(TLB_V4_I_PAGE) && tlb_flag(TLB_V4_I_FULL))
 		asm("mcr p15, 0, %0, c8, c5, 0" : : "r" (zero) : "cc");
-
+#ifdef CONFIG_CPU_PJ4_ERRATA_4315
+	/* Invalidate all bcoz no vma info */
+	if (tlb_flag(TLB_V6_U_PAGE))
+		asm("mcr p15, 0, %0, c8, c7, 0" : : "r" (0));
+#else
 	if (tlb_flag(TLB_V6_U_PAGE))
 		asm("mcr p15, 0, %0, c8, c7, 1" : : "r" (kaddr) : "cc");
+#endif
 	if (tlb_flag(TLB_V6_D_PAGE))
 		asm("mcr p15, 0, %0, c8, c6, 1" : : "r" (kaddr) : "cc");
 	if (tlb_flag(TLB_V6_I_PAGE))
@@ -478,9 +512,13 @@ static inline void flush_pmd_entry(pmd_t *pmd)
 			: : "r" (pmd) : "cc");
 
 	if (tlb_flag(TLB_L2CLEAN_FR))
+#ifndef CONFIG_CACHE_TAUROS2
 		asm("mcr	p15, 1, %0, c15, c9, 1  @ L2 flush_pmd"
 			: : "r" (pmd) : "cc");
-
+#else
+	asm("mcr        p15, 1, %0, c7, c11, 1  @ L2 flush_pmd"
+	    		: : "r" (pmd) : "cc");
+#endif
 	if (tlb_flag(TLB_WB))
 		dsb();
 }
@@ -494,8 +532,13 @@ static inline void clean_pmd_entry(pmd_t *pmd)
 			: : "r" (pmd) : "cc");
 
 	if (tlb_flag(TLB_L2CLEAN_FR))
+#ifndef CONFIG_CACHE_TAUROS2
 		asm("mcr	p15, 1, %0, c15, c9, 1  @ L2 flush_pmd"
 			: : "r" (pmd) : "cc");
+#else
+		asm("mcr        p15, 1, %0, c7, c11, 1  @ L2 flush_pmd"
+		    	: : "r" (pmd) : "cc");
+#endif
 }
 
 #undef tlb_flag

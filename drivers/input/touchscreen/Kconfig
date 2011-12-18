@@ -271,6 +271,12 @@ config TOUCHSCREEN_MIGOR
 	  To compile this driver as a module, choose M here: the
 	  module will be called migor_ts.
 
+config TOUCHSCREEN_SYNAPTICS_I2C_RMI
+	tristate "Synaptics i2c touchscreen"
+	depends on I2C
+	help
+	  This enables support for Synaptics RMI over I2C based touchscreens.
+
 config TOUCHSCREEN_TOUCHRIGHT
 	tristate "Touchright serial touchscreen"
 	select SERIO
@@ -491,15 +497,25 @@ config TOUCHSCREEN_USB_E2I
 	depends on TOUCHSCREEN_USB_COMPOSITE
 
 config TOUCHSCREEN_TOUCHIT213
-	tristate "Sahara TouchIT-213 touchscreen"
-	select SERIO
-	help
-	  Say Y here if you have a Sahara TouchIT-213 Tablet PC.
+        tristate "Sahara TouchIT-213 touchscreen"
+        select SERIO
+        help
+          Say Y here if you have a Sahara TouchIT-213 Tablet PC.
+          If unsure, say N.
+          To compile this driver as a module, choose M here: the
+          module will be called touchit213.
 
-	  If unsure, say N.
+config TOUCHSCREEN_TSC2005
+	tristate "TSC2005 touchscreens"
+	depends on SPI_MASTER
+	help
+	  Say Y here if you have a touchscreen interface using the
+	  TSC2005 controller, and your board-specific
+	  setup code includes that in its table of SPI devices.
+	  If unsure, say N (but it's safe to say "Y").
 
 	  To compile this driver as a module, choose M here: the
-	  module will be called touchit213.
+	  module will be called tsc2005.
 
 config TOUCHSCREEN_TSC2007
 	tristate "TSC2007 based touchscreens"
@@ -530,4 +546,19 @@ config TOUCHSCREEN_PCAP
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called pcap_ts.
+
+config TOUCHSCREEN_RT5611
+        tristate "RT5611 touchscreens"
+        depends on AC97_BUS
+        help
+          Say Y here if you have a touchscreen interface using the
+          Realtek ALC5611 controller, and your board-specific
+          setup code includes that in its table of AC97 devices.
+
+          If unsure, say N (but it's safe to say "Y").
+
+          To compile this driver as a module, choose M here: the
+          module will be called rt5611_ts.
+
 endif
+

@@ -481,6 +481,7 @@ __armv7_mmu_cache_on:
 		mcr	p15, 0, r0, c1, c0, 0	@ load control register
 		mrc	p15, 0, r0, c1, c0, 0	@ and read it back
 		mov	r0, #0
+		mcr	p15, 0, r0, c8, c7, 0	@ invalidate I,D TLBs
 		mcr	p15, 0, r0, c7, c5, 4	@ ISB
 		mov	pc, r12
 
@@ -737,12 +738,13 @@ proc_types:
 		W(b)	__armv4_mmu_cache_off
 		W(b)	__armv4_mmu_cache_flush
 
-		.word	0x0007b000		@ ARMv6
-		.word	0x000ff000
+#ifdef CONFIG_DOVE_DEBUGGER_MODE_V6
+		.word	0x000f0000		@ ARMv6
+		.word	0x000f0000
 		W(b)	__armv4_mmu_cache_on
 		W(b)	__armv4_mmu_cache_off
 		W(b)	__armv6_mmu_cache_flush
-
+#endif
 		.word	0x000f0000		@ new CPU Id
 		.word	0x000f0000
 		W(b)	__armv7_mmu_cache_on

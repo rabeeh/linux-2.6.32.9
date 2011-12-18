@@ -1,5 +1,5 @@
 /*
- *  arch/arm/mach-integrator/include/mach/memory.h
+ *  linux/include/asm-arm/arch-integrator/memory.h
  *
  *  Copyright (C) 1999 ARM Limited
  *
@@ -24,10 +24,17 @@
  * Physical DRAM offset.
  */
 #define PHYS_OFFSET	UL(0x00000000)
-
 #define BUS_OFFSET	UL(0x80000000)
+
 #define __virt_to_bus(x)	((x) - PAGE_OFFSET + BUS_OFFSET)
 #define __bus_to_virt(x)	((x) - BUS_OFFSET + PAGE_OFFSET)
 #define __pfn_to_bus(x)		(((x) << PAGE_SHIFT) + BUS_OFFSET)
+
+/*
+ * Increase size of DMA-consistent memory region
+ *
+ */
+#define CONSISTENT_DMA_SIZE 0x3000000   // 48M
+#define CONFIG_FORCE_MAX_ZONEORDER 14
 
 #endif

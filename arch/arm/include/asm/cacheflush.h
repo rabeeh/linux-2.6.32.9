@@ -418,10 +418,18 @@ static inline void __flush_icache_all(void)
 	extern void v6_icache_inval_all(void);
 	v6_icache_inval_all();
 #else
+#ifdef CONFIG_CPU_PJ4_ERRATA_4574_4731
 	asm("mcr	p15, 0, %0, c7, c5, 0	@ invalidate I-cache\n"
 	    :
 	    : "r" (0));
 #endif
+	asm("mcr	p15, 0, %0, c7, c5, 0	@ invalidate I-cache\n"
+	    :
+	    : "r" (0));
+#endif
+	asm("mcr	p15, 0, %0, c7, c5, 4	@ ISB is required per ARM spec\n"
+	    :
+	    : "r" (0));
 }
 
 #define ARCH_HAS_FLUSH_ANON_PAGE

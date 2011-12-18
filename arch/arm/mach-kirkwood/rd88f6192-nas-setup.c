@@ -16,6 +16,7 @@
 #include <linux/spi/flash.h>
 #include <linux/spi/spi.h>
 #include <linux/spi/orion_spi.h>
+#include <mach/gpio.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <mach/kirkwood.h>
@@ -53,8 +54,16 @@ static void __init rd88f6192_init(void)
 	 */
 	kirkwood_init();
 
+	orion_gpio_set_valid(RD88F6192_GPIO_USB_VBUS, 1);
+	if (gpio_request(RD88F6192_GPIO_USB_VBUS, "USB VBUS") != 0 ||
+	    gpio_direction_output(RD88F6192_GPIO_USB_VBUS, 1) != 0)
+		pr_err("RD-88F6192-NAS: failed to setup USB VBUS GPIO\n");
+
 	kirkwood_ehci_init();
 	kirkwood_ge00_init(&rd88f6192_ge00_data);
+#ifdef CONFIG_MV_ETHERNET
+	kirkwood_eth0_init();
+#endif
 	kirkwood_sata_init(&rd88f6192_sata_data);
 	spi_register_board_info(rd88F6192_spi_slave_info,
 				ARRAY_SIZE(rd88F6192_spi_slave_info));

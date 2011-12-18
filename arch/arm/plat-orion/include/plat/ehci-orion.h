@@ -13,6 +13,7 @@
 
 enum orion_ehci_phy_ver {
 	EHCI_PHY_ORION,
+	EHCI_PHY_DOVE,
 	EHCI_PHY_DD,
 	EHCI_PHY_KW,
 	EHCI_PHY_NA,

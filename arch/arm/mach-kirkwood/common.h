@@ -29,6 +29,9 @@ void kirkwood_setup_cpu_mbus(void);
 
 void kirkwood_pcie_id(u32 *dev, u32 *rev);
 
+
+void kirkwood_pcie_id(u32 *dev, u32 *rev);
+
 void kirkwood_ehci_init(void);
 void kirkwood_ge00_init(struct mv643xx_eth_platform_data *eth_data);
 void kirkwood_ge01_init(struct mv643xx_eth_platform_data *eth_data);
@@ -43,6 +46,8 @@ void kirkwood_uart1_init(void);
 void kirkwood_nand_init(struct mtd_partition *parts, int nr_parts, int delay);
 
 extern int kirkwood_tclk;
+void kirkwood_i2s_init(void);
+void kirkwood_eth0_init(void);
 extern struct sys_timer kirkwood_timer;
 
 #define ARRAY_AND_SIZE(x)	(x), ARRAY_SIZE(x)

@@ -521,6 +521,7 @@ config SCSI_AIC7XXX_OLD
 source "drivers/scsi/aic7xxx/Kconfig.aic79xx"
 source "drivers/scsi/aic94xx/Kconfig"
 source "drivers/scsi/mvsas/Kconfig"
+source "drivers/scsi/mvumi/Kconfig"
 
 config SCSI_DPT_I2O
 	tristate "Adaptec I2O RAID support "

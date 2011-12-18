@@ -21,4 +21,29 @@ config DISPLAY_SUPPORT
 comment "Display hardware drivers"
 	depends on DISPLAY_SUPPORT
 
+config CH7025_COMPOSITE
+    tristate "TV-OUT support (Chrontel CH7025/CH7026 TV Composite)"
+    default y
+    help
+       The device is able to encode the video signals and generate
+       synchronization signals SDTV format for NTSC and PAL standards.
+
+config KG2_ANX7150
+	tristate "KG2_ANX7150 support"
+	default y
+	help
+	  KG2/ANX7150 device driver support.
+
+config ADI9889
+	tristate "ADI9889 support"
+	default n
+	help
+	  ADI9889 device driver support.
+
+config THS8200
+       tristate "THS8200 support"
+
+       default y
+       help
+         THS8200 device driver support.
 endmenu

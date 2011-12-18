@@ -1918,7 +1918,7 @@ static int omap_hsmmc_suspend(struct platform_device *pdev, pm_message_t state)
 		}
 		cancel_work_sync(&host->mmc_carddetect_work);
 		mmc_host_enable(host->mmc);
-		ret = mmc_suspend_host(host->mmc, state);
+		ret = mmc_suspend_host(host->mmc);
 		if (ret == 0) {
 			OMAP_HSMMC_WRITE(host->base, ISE, 0);
 			OMAP_HSMMC_WRITE(host->base, IE, 0);

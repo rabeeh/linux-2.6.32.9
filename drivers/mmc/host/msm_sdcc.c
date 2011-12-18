@@ -1216,7 +1216,7 @@ msmsdcc_suspend(struct platform_device *dev, pm_message_t state)
 			disable_irq(host->stat_irq);
 
 		if (mmc->card && mmc->card->type != MMC_TYPE_SDIO)
-			rc = mmc_suspend_host(mmc, state);
+			rc = mmc_suspend_host(mmc);
 		if (!rc) {
 			writel(0, host->base + MMCIMASK0);
 

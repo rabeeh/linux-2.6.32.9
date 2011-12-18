@@ -11,6 +11,8 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/interrupt.h>
+#include <linux/irq.h>
 #include <linux/input-polldev.h>
 #include <linux/gpio_mouse.h>
 
@@ -24,17 +26,24 @@ static void gpio_mouse_scan(struct input_polled_dev *dev)
 {
 	struct gpio_mouse_platform_data *gpio = dev->private;
 	struct input_dev *input = dev->input;
-	int x, y;
+	int x, y, key = 0;
+	int activity = 0;
 
-	if (gpio->bleft >= 0)
-		input_report_key(input, BTN_LEFT,
-				gpio_get_value(gpio->bleft) ^ gpio->polarity);
-	if (gpio->bmiddle >= 0)
-		input_report_key(input, BTN_MIDDLE,
-				gpio_get_value(gpio->bmiddle) ^ gpio->polarity);
-	if (gpio->bright >= 0)
-		input_report_key(input, BTN_RIGHT,
-				gpio_get_value(gpio->bright) ^ gpio->polarity);
+	if (gpio->bleft >= 0) {
+		key = gpio_get_value(gpio->bleft) ^ gpio->polarity;
+		activity |= key;
+		input_report_key(input, BTN_LEFT, key);
+	}
+	if (gpio->bmiddle >= 0) {
+		key = gpio_get_value(gpio->bmiddle) ^ gpio->polarity;
+		activity |= key;
+		input_report_key(input, BTN_MIDDLE, key);
+	}
+	if (gpio->bright >= 0) {
+		key = gpio_get_value(gpio->bright) ^ gpio->polarity;
+		activity |= key;
+		input_report_key(input, BTN_RIGHT, key);
+	}
 
 	x = (gpio_get_value(gpio->right) ^ gpio->polarity)
 		- (gpio_get_value(gpio->left) ^ gpio->polarity);
@@ -44,6 +53,21 @@ static void gpio_mouse_scan(struct input_polled_dev *dev)
 	input_report_rel(input, REL_X, x);
 	input_report_rel(input, REL_Y, y);
 	input_sync(input);
+
+	activity |= x | y;
+	if (!activity)
+		input_stop_polled_device(input);
+}
+
+static irqreturn_t gpio_mouse_isr(int irq, void *dev_id)
+{
+	struct input_polled_dev *input_poll = dev_id;
+	struct input_dev *input = input_poll->input;
+
+	if (input_poll->stop)
+		input_resume_polled_device(input);
+
+	return IRQ_HANDLED;
 }
 
 static int __devinit gpio_mouse_probe(struct platform_device *pdev)
@@ -127,6 +151,23 @@ static int __devinit gpio_mouse_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "could not register input device\n");
 		goto out_free_polldev;
 	}
+	
+	if (pdata->use_activity_irq) {
+		int irq = irq = gpio_to_irq(pdata->activity_gpio);
+		dev_info(&pdev->dev, "gpio-mouse: use activity gpio %d irq (%d)\n",
+			 pdata->activity_gpio, irq);
+
+		error = devm_request_irq(&pdev->dev, irq, gpio_mouse_isr,
+					 IRQF_SAMPLE_RANDOM | IRQF_SHARED |
+					 IRQF_TRIGGER_RISING |
+					 IRQF_TRIGGER_FALLING,
+					 "gpio_mouse", input_poll);
+		if (error) {
+			dev_err(&pdev->dev, "gpio-mouse: Unable to claim irq %d"
+				"; error %d\n", irq, error);
+			goto out_unregister_polldev;
+		}
+	}
 
 	dev_dbg(&pdev->dev, "%d ms scan time, buttons: %s%s%s\n",
 			pdata->scan_ms,
@@ -136,6 +177,8 @@ static int __devinit gpio_mouse_probe(struct platform_device *pdev)
 
 	return 0;
 
+ out_unregister_polldev:
+	input_unregister_polled_device(input_poll);
  out_free_polldev:
 	input_free_polled_device(input_poll);
 	platform_set_drvdata(pdev, NULL);
@@ -173,6 +216,7 @@ static int __devexit gpio_mouse_remove(struct platform_device *pdev)
 static struct platform_driver gpio_mouse_device_driver = {
 	.probe		= gpio_mouse_probe,
 	.remove		= __devexit_p(gpio_mouse_remove),
+	.probe		= gpio_mouse_probe,
 	.driver		= {
 		.name	= "gpio_mouse",
 		.owner	= THIS_MODULE,

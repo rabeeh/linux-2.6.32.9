@@ -51,11 +51,26 @@ static void vfp_single_dump(const char *str, struct vfp_single *s)
 		 str, s->sign != 0, s->exponent, s->significand);
 }
 
-static void vfp_single_normalise_denormal(struct vfp_single *vs)
+static void vfp_single_normalise_denormal(struct vfp_single *vs, u32 fpscr, u32 *exceptions)
 {
-	int bits = 31 - fls(vs->significand);
+	int bits;
 
 	vfp_single_dump("normalise_denormal: in", vs);
+	
+	pr_debug("VFP: fpscr =%08x\n", fpscr);
+	/* If we are in Flush to zero mode, just zero the fraction */
+	if (fpscr & FPSCR_FLUSHTOZERO) {
+		vs->significand = 0;
+		vfp_single_dump("normalise_denormal: Flushed to zero.", vs);
+		
+		/* IDC is set whenever the FPU coprocessor is in flush-to-zero 
+		 * mode and a subnormal input operand is replaced by a positive zero.
+		 */
+		*exceptions |= FPSCR_IDC;
+		return;
+	}
+
+	bits = 31 - fls(vs->significand);
 
 	if (bits) {
 		vs->exponent -= bits - 1;
@@ -72,7 +87,7 @@ u32 __vfp_single_normaliseround(int sd, struct vfp_single *vs, u32 fpscr, u32 ex
 u32 vfp_single_normaliseround(int sd, struct vfp_single *vs, u32 fpscr, u32 exceptions, const char *func)
 #endif
 {
-	u32 significand, incr, rmode;
+	u32 old_significand, significand, incr, rmode;
 	int exponent, shift, underflow;
 
 	vfp_single_dump("pack: in", vs);
@@ -118,13 +133,42 @@ u32 vfp_single_normaliseround(int sd, struct vfp_single *vs, u32 fpscr, u32 exce
 	if (underflow) {
 		significand = vfp_shiftright32jamming(significand, -exponent);
 		exponent = 0;
+
 #ifdef DEBUG
 		vs->exponent = exponent;
 		vs->significand = significand;
 		vfp_single_dump("pack: tiny number", vs);
 #endif
-		if (!(significand & ((1 << (VFP_SINGLE_LOW_BITS + 1)) - 1)))
+	/* 
+	 * When an underflow trap is not implemented, or is not 
+	 * enabled (the default case), underflow shall be signaled only 
+	 * when both tininess and loss of accuracy have been detected. 
+	 * When an underflow trap has been implemented and is enabled, 
+	 * underflow shall be signaled when tininess is detected 
+	 * regardless of loss of accuracy.
+	 */
+		if (!(fpscr & FPSCR_UFE)) 
+			if (!(significand & ((1 << (VFP_SINGLE_LOW_BITS + 1)) - 1)))
+				underflow = 0;
+
+	/* 
+	 * Exp = 0 			=> 2^-126
+	 * significant = 0x40000000	=> 0*(2^1) + 1*(2^0) + 0*(2^-1) + 0*(2^-2) + ....
+	 * Total 			=> 2^-126 (minimum normal number)
+	 */
+		if (significand >= 0x80000000) 
 			underflow = 0;
+
+	/*
+	 * In flush-to-zero mode, UFC is set whenever a result is 
+	 * below the threshold for normal numbers before rounding, and the 
+	 * result is flushed to zero.
+	 */
+		if (underflow && (fpscr & FPSCR_FLUSHTOZERO)){
+			significand = 0;
+			exceptions |= FPSCR_UFC;
+			pr_debug("VFP: Flushed to zero.");
+		}
 	}
 
 	/*
@@ -168,6 +212,7 @@ u32 vfp_single_normaliseround(int sd, struct vfp_single *vs, u32 fpscr, u32 exce
 	/*
 	 * Do our rounding.
 	 */
+	old_significand = significand;
 	significand += incr;
 
 	/*
@@ -185,7 +230,7 @@ u32 vfp_single_normaliseround(int sd, struct vfp_single *vs, u32 fpscr, u32 exce
 	} else {
 		if (significand >> (VFP_SINGLE_LOW_BITS + 1) == 0)
 			exponent = 0;
-		if (exponent || significand > 0x80000000)
+		if (exponent || (old_significand + (incr >> 1)) >= 0x80000000)
 			underflow = 0;
 		if (underflow)
 			exceptions |= FPSCR_UFC;
@@ -201,7 +246,11 @@ u32 vfp_single_normaliseround(int sd, struct vfp_single *vs, u32 fpscr, u32 exce
 		pr_debug("VFP: %s: d(s%d)=%08x exceptions=%08x\n", func,
 			 sd, d, exceptions);
 #endif
-		vfp_put_float(d, sd);
+		if (-1 != sd){
+			vfp_put_float(d, sd);
+		} else {
+			vfp_single_unpack(vs, d);
+		}
 	}
 
 	return exceptions;
@@ -316,39 +365,39 @@ u32 vfp_estimate_sqrt_significand(u32 exponent, u32 significand)
 static u32 vfp_single_fsqrt(int sd, int unused, s32 m, u32 fpscr)
 {
 	struct vfp_single vsm, vsd;
-	int ret, tm;
+	int tm;
+	u32 exceptions = 0;
 
 	vfp_single_unpack(&vsm, m);
+
+	if (vsm.exponent == 0 && vsm.significand)
+		vfp_single_normalise_denormal(&vsm, fpscr, &exceptions);
+
+
 	tm = vfp_single_type(&vsm);
 	if (tm & (VFP_NAN|VFP_INFINITY)) {
 		struct vfp_single *vsp = &vsd;
 
 		if (tm & VFP_NAN)
-			ret = vfp_propagate_nan(vsp, &vsm, NULL, fpscr);
+			exceptions |= vfp_propagate_nan(vsp, &vsm, NULL, fpscr);
 		else if (vsm.sign == 0) {
  sqrt_copy:
 			vsp = &vsm;
-			ret = 0;
 		} else {
  sqrt_invalid:
 			vsp = &vfp_single_default_qnan;
-			ret = FPSCR_IOC;
+			exceptions |= FPSCR_IOC;
 		}
 		vfp_put_float(vfp_single_pack(vsp), sd);
-		return ret;
+		return exceptions;
 	}
+
 
 	/*
 	 * sqrt(+/- 0) == +/- 0
 	 */
 	if (tm & VFP_ZERO)
 		goto sqrt_copy;
-
-	/*
-	 * Normalise a denormalised number
-	 */
-	if (tm & VFP_DENORMAL)
-		vfp_single_normalise_denormal(&vsm);
 
 	/*
 	 * sqrt(<0) = invalid
@@ -391,7 +440,7 @@ static u32 vfp_single_fsqrt(int sd, int unused, s32 m, u32 fpscr)
 	}
 	vsd.significand = vfp_shiftright32jamming(vsd.significand, 1);
 
-	return vfp_single_normaliseround(sd, &vsd, fpscr, 0, "fsqrt");
+	return vfp_single_normaliseround(sd, &vsd, fpscr, exceptions, "fsqrt");
 }
 
 /*
@@ -423,6 +472,11 @@ static u32 vfp_compare(int sd, int signal_on_qnan, s32 m, u32 fpscr)
 			 */
 			ret |= FPSCR_IOC;
 	}
+
+	if (fpscr & FPSCR_FLUSHTOZERO) 
+		if ((vfp_single_packed_exponent(m) == 0 && vfp_single_packed_mantissa(m)) || 
+		    (vfp_single_packed_exponent(d) == 0 && vfp_single_packed_mantissa(d)))
+			ret |= FPSCR_IDC;
 
 	if (ret == 0) {
 		if (d == m || vfp_single_packed_abs(d | m) == 0) {
@@ -497,7 +551,7 @@ static u32 vfp_single_fcvtd(int dd, int unused, s32 m, u32 fpscr)
 		exceptions = FPSCR_IOC;
 
 	if (tm & VFP_DENORMAL)
-		vfp_single_normalise_denormal(&vsm);
+		vfp_single_normalise_denormal(&vsm, fpscr, &exceptions);
 
 	vdd.sign = vsm.sign;
 	vdd.significand = (u64)vsm.significand << 32;
@@ -559,7 +613,7 @@ static u32 vfp_single_ftoui(int sd, int unused, s32 m, u32 fpscr)
 	 */
 	tm = vfp_single_type(&vsm);
 	if (tm & VFP_DENORMAL)
-		exceptions |= FPSCR_IDC;
+		vfp_single_normalise_denormal(&vsm, fpscr, &exceptions);
 
 	if (tm & VFP_NAN)
 		vsm.sign = 0;
@@ -602,12 +656,14 @@ static u32 vfp_single_ftoui(int sd, int unused, s32 m, u32 fpscr)
 	} else {
 		d = 0;
 		if (vsm.exponent | vsm.significand) {
-			exceptions |= FPSCR_IXC;
-			if (rmode == FPSCR_ROUND_PLUSINF && vsm.sign == 0)
-				d = 1;
-			else if (rmode == FPSCR_ROUND_MINUSINF && vsm.sign) {
+			if (rmode == FPSCR_ROUND_MINUSINF && vsm.sign) {
 				d = 0;
 				exceptions |= FPSCR_IOC;
+			}
+			else {
+				exceptions |= FPSCR_IXC; 
+				if (rmode == FPSCR_ROUND_PLUSINF && vsm.sign == 0)
+					d = 1;
 			}
 		}
 	}
@@ -621,7 +677,7 @@ static u32 vfp_single_ftoui(int sd, int unused, s32 m, u32 fpscr)
 
 static u32 vfp_single_ftouiz(int sd, int unused, s32 m, u32 fpscr)
 {
-	return vfp_single_ftoui(sd, unused, m, FPSCR_ROUND_TOZERO);
+	return vfp_single_ftoui(sd, unused, m, (fpscr | FPSCR_ROUND_TOZERO));
 }
 
 static u32 vfp_single_ftosi(int sd, int unused, s32 m, u32 fpscr)
@@ -639,7 +695,7 @@ static u32 vfp_single_ftosi(int sd, int unused, s32 m, u32 fpscr)
 	 */
 	tm = vfp_single_type(&vsm);
 	if (vfp_single_type(&vsm) & VFP_DENORMAL)
-		exceptions |= FPSCR_IDC;
+		vfp_single_normalise_denormal(&vsm, fpscr, &exceptions);
 
 	if (tm & VFP_NAN) {
 		d = 0;
@@ -700,7 +756,7 @@ static u32 vfp_single_ftosi(int sd, int unused, s32 m, u32 fpscr)
 
 static u32 vfp_single_ftosiz(int sd, int unused, s32 m, u32 fpscr)
 {
-	return vfp_single_ftosi(sd, unused, m, FPSCR_ROUND_TOZERO);
+	return vfp_single_ftosi(sd, unused, m, (fpscr | FPSCR_ROUND_TOZERO));
 }
 
 static struct op fops_ext[32] = {
@@ -713,8 +769,8 @@ static struct op fops_ext[32] = {
 	[FEXT_TO_IDX(FEXT_FCMPZ)]	= { vfp_single_fcmpz,  OP_SCALAR },
 	[FEXT_TO_IDX(FEXT_FCMPEZ)]	= { vfp_single_fcmpez, OP_SCALAR },
 	[FEXT_TO_IDX(FEXT_FCVT)]	= { vfp_single_fcvtd,  OP_SCALAR|OP_DD },
-	[FEXT_TO_IDX(FEXT_FUITO)]	= { vfp_single_fuito,  OP_SCALAR },
-	[FEXT_TO_IDX(FEXT_FSITO)]	= { vfp_single_fsito,  OP_SCALAR },
+	[FEXT_TO_IDX(FEXT_FUITO)]	= { vfp_single_fuito,  OP_SCALAR|OP_DD },
+	[FEXT_TO_IDX(FEXT_FSITO)]	= { vfp_single_fsito,  OP_SCALAR|OP_DD },
 	[FEXT_TO_IDX(FEXT_FTOUI)]	= { vfp_single_ftoui,  OP_SCALAR },
 	[FEXT_TO_IDX(FEXT_FTOUIZ)]	= { vfp_single_ftouiz, OP_SCALAR },
 	[FEXT_TO_IDX(FEXT_FTOSI)]	= { vfp_single_ftosi,  OP_SCALAR },
@@ -789,6 +845,7 @@ vfp_single_add(struct vfp_single *vsd, struct vfp_single *vsn,
 		struct vfp_single *t = vsn;
 		vsn = vsm;
 		vsm = t;
+		pr_debug("VFP: swapping M <-> N\n");
 	}
 
 	/*
@@ -895,32 +952,43 @@ static u32
 vfp_single_multiply_accumulate(int sd, int sn, s32 m, u32 fpscr, u32 negate, char *func)
 {
 	struct vfp_single vsd, vsp, vsn, vsm;
-	u32 exceptions;
+	u32 exceptions = 0;
 	s32 v;
 
 	v = vfp_get_float(sn);
 	pr_debug("VFP: s%u = %08x\n", sn, v);
 	vfp_single_unpack(&vsn, v);
 	if (vsn.exponent == 0 && vsn.significand)
-		vfp_single_normalise_denormal(&vsn);
+		vfp_single_normalise_denormal(&vsn, fpscr, &exceptions);
 
 	vfp_single_unpack(&vsm, m);
 	if (vsm.exponent == 0 && vsm.significand)
-		vfp_single_normalise_denormal(&vsm);
+		vfp_single_normalise_denormal(&vsm, fpscr, &exceptions);
 
-	exceptions = vfp_single_multiply(&vsp, &vsn, &vsm, fpscr);
+	exceptions |= vfp_single_multiply(&vsp, &vsn, &vsm, fpscr);
+	vfp_single_dump("Midterm result", &vsp);
+	exceptions |= vfp_single_normaliseround(-1, &vsp, fpscr, exceptions, "fmac-mul");
+
+	vfp_single_dump("Midterm result", &vsp);
+
+	if (vsp.exponent == 0 && vsp.significand)
+		vfp_single_normalise_denormal(&vsp, fpscr, &exceptions);
+
 	if (negate & NEG_MULTIPLY)
 		vsp.sign = vfp_sign_negate(vsp.sign);
 
 	v = vfp_get_float(sd);
 	pr_debug("VFP: s%u = %08x\n", sd, v);
 	vfp_single_unpack(&vsn, v);
+	if (vsn.exponent == 0 && vsn.significand)
+		vfp_single_normalise_denormal(&vsn, fpscr, &exceptions);
+
 	if (negate & NEG_SUBTRACT)
 		vsn.sign = vfp_sign_negate(vsn.sign);
 
 	exceptions |= vfp_single_add(&vsd, &vsn, &vsp, fpscr);
 
-	return vfp_single_normaliseround(sd, &vsd, fpscr, exceptions, func);
+	return vfp_single_normaliseround(sd, &vsd, fpscr, exceptions, "fmac-add");
 }
 
 /*
@@ -965,20 +1033,20 @@ static u32 vfp_single_fnmsc(int sd, int sn, s32 m, u32 fpscr)
 static u32 vfp_single_fmul(int sd, int sn, s32 m, u32 fpscr)
 {
 	struct vfp_single vsd, vsn, vsm;
-	u32 exceptions;
+	u32 exceptions = 0;
 	s32 n = vfp_get_float(sn);
 
 	pr_debug("VFP: s%u = %08x\n", sn, n);
 
 	vfp_single_unpack(&vsn, n);
 	if (vsn.exponent == 0 && vsn.significand)
-		vfp_single_normalise_denormal(&vsn);
+		vfp_single_normalise_denormal(&vsn, fpscr, &exceptions);
 
 	vfp_single_unpack(&vsm, m);
 	if (vsm.exponent == 0 && vsm.significand)
-		vfp_single_normalise_denormal(&vsm);
+		vfp_single_normalise_denormal(&vsm, fpscr, &exceptions);
 
-	exceptions = vfp_single_multiply(&vsd, &vsn, &vsm, fpscr);
+	exceptions |= vfp_single_multiply(&vsd, &vsn, &vsm, fpscr);
 	return vfp_single_normaliseround(sd, &vsd, fpscr, exceptions, "fmul");
 }
 
@@ -988,20 +1056,25 @@ static u32 vfp_single_fmul(int sd, int sn, s32 m, u32 fpscr)
 static u32 vfp_single_fnmul(int sd, int sn, s32 m, u32 fpscr)
 {
 	struct vfp_single vsd, vsn, vsm;
-	u32 exceptions;
+	u32 exceptions = 0;
 	s32 n = vfp_get_float(sn);
 
 	pr_debug("VFP: s%u = %08x\n", sn, n);
 
 	vfp_single_unpack(&vsn, n);
 	if (vsn.exponent == 0 && vsn.significand)
-		vfp_single_normalise_denormal(&vsn);
+		vfp_single_normalise_denormal(&vsn, fpscr, &exceptions);
 
 	vfp_single_unpack(&vsm, m);
 	if (vsm.exponent == 0 && vsm.significand)
-		vfp_single_normalise_denormal(&vsm);
+		vfp_single_normalise_denormal(&vsm, fpscr, &exceptions);
 
-	exceptions = vfp_single_multiply(&vsd, &vsn, &vsm, fpscr);
+	exceptions |= vfp_single_multiply(&vsd, &vsn, &vsm, fpscr);
+	exceptions |= vfp_single_normaliseround(-1, &vsd, fpscr, exceptions, "fnmul-mul");
+
+	if (vsd.exponent == 0 && vsd.significand)
+		vfp_single_normalise_denormal(&vsd, fpscr, &exceptions);
+
 	vsd.sign = vfp_sign_negate(vsd.sign);
 	return vfp_single_normaliseround(sd, &vsd, fpscr, exceptions, "fnmul");
 }
@@ -1012,7 +1085,7 @@ static u32 vfp_single_fnmul(int sd, int sn, s32 m, u32 fpscr)
 static u32 vfp_single_fadd(int sd, int sn, s32 m, u32 fpscr)
 {
 	struct vfp_single vsd, vsn, vsm;
-	u32 exceptions;
+	u32 exceptions = 0;
 	s32 n = vfp_get_float(sn);
 
 	pr_debug("VFP: s%u = %08x\n", sn, n);
@@ -1022,13 +1095,13 @@ static u32 vfp_single_fadd(int sd, int sn, s32 m, u32 fpscr)
 	 */
 	vfp_single_unpack(&vsn, n);
 	if (vsn.exponent == 0 && vsn.significand)
-		vfp_single_normalise_denormal(&vsn);
+		vfp_single_normalise_denormal(&vsn, fpscr, &exceptions);
 
 	vfp_single_unpack(&vsm, m);
 	if (vsm.exponent == 0 && vsm.significand)
-		vfp_single_normalise_denormal(&vsm);
+		vfp_single_normalise_denormal(&vsm, fpscr, &exceptions);
 
-	exceptions = vfp_single_add(&vsd, &vsn, &vsm, fpscr);
+	exceptions |= vfp_single_add(&vsd, &vsn, &vsm, fpscr);
 
 	return vfp_single_normaliseround(sd, &vsd, fpscr, exceptions, "fadd");
 }
@@ -1038,11 +1111,49 @@ static u32 vfp_single_fadd(int sd, int sn, s32 m, u32 fpscr)
  */
 static u32 vfp_single_fsub(int sd, int sn, s32 m, u32 fpscr)
 {
+	struct vfp_single vsd, vsn, vsm;
+	u32 exceptions = 0;
+	int tn, tm;
+
 	/*
-	 * Subtraction is addition with one sign inverted.
+	 * Subtraction is like addition, but with a negated operand.
+	 * Problem is when you use same register as source operands. 
+	 * For example fsub s6, s7, s7. In that case negate s7  
+	 * operand will result wrong value...
 	 */
-	return vfp_single_fadd(sd, sn, vfp_single_packed_negate(m), fpscr);
+	
+	s32 n = vfp_get_float(sn);
+	pr_debug("VFP: s%u = %08x\n", sn, n);
+
+	/*
+	 * Unpack and normalise denormals.
+	 */
+	vfp_single_unpack(&vsn, n);
+	if (vsn.exponent == 0 && vsn.significand)
+		vfp_single_normalise_denormal(&vsn, fpscr, &exceptions);
+
+	vfp_single_unpack(&vsm, m);
+	if (vsm.exponent == 0 && vsm.significand)
+		vfp_single_normalise_denormal(&vsm, fpscr, &exceptions);
+
+	/*
+	 * Is either of parameters is NaN do not negate their sign.
+	 * In that case result is based on the input NaN.
+	 */
+	tn = vfp_single_type(&vsn);
+	tm = vfp_single_type(&vsm);
+
+	if (!((tn & (VFP_QNAN | VFP_SNAN)) || (tm & (VFP_QNAN | VFP_SNAN))))	
+		/* Negate m value */
+		vsm.sign = vfp_sign_negate(vsm.sign);
+	else
+		pr_debug("VFP: SUB canceled minus signe. One of parameters is NaN tn=0x%x tm=0x%x\n", tn, tm);
+	
+	exceptions |= vfp_single_add(&vsd, &vsn, &vsm, fpscr);
+
+	return vfp_single_normaliseround(sd, &vsd, fpscr, exceptions, "fsub");
 }
+
 
 /*
  * sd = sn / sm
@@ -1058,6 +1169,11 @@ static u32 vfp_single_fdiv(int sd, int sn, s32 m, u32 fpscr)
 
 	vfp_single_unpack(&vsn, n);
 	vfp_single_unpack(&vsm, m);
+
+	if (vsn.exponent == 0 && vsn.significand)
+		vfp_single_normalise_denormal(&vsn, fpscr, &exceptions);
+	if (vsm.exponent == 0 && vsm.significand)
+		vfp_single_normalise_denormal(&vsm, fpscr, &exceptions);
 
 	vsd.sign = vsn.sign ^ vsm.sign;
 
@@ -1101,10 +1217,6 @@ static u32 vfp_single_fdiv(int sd, int sn, s32 m, u32 fpscr)
 	if (tm & VFP_INFINITY || tn & VFP_ZERO)
 		goto zero;
 
-	if (tn & VFP_DENORMAL)
-		vfp_single_normalise_denormal(&vsn);
-	if (tm & VFP_DENORMAL)
-		vfp_single_normalise_denormal(&vsm);
 
 	/*
 	 * Ok, we have two numbers, we can perform division.
@@ -1123,16 +1235,16 @@ static u32 vfp_single_fdiv(int sd, int sn, s32 m, u32 fpscr)
 	if ((vsd.significand & 0x3f) == 0)
 		vsd.significand |= ((u64)vsm.significand * vsd.significand != (u64)vsn.significand << 32);
 
-	return vfp_single_normaliseround(sd, &vsd, fpscr, 0, "fdiv");
+	return vfp_single_normaliseround(sd, &vsd, fpscr, exceptions, "fdiv");
 
  vsn_nan:
-	exceptions = vfp_propagate_nan(&vsd, &vsn, &vsm, fpscr);
+	exceptions |= vfp_propagate_nan(&vsd, &vsn, &vsm, fpscr);
  pack:
 	vfp_put_float(vfp_single_pack(&vsd), sd);
 	return exceptions;
 
  vsm_nan:
-	exceptions = vfp_propagate_nan(&vsd, &vsm, &vsn, fpscr);
+	exceptions |= vfp_propagate_nan(&vsd, &vsm, &vsn, fpscr);
 	goto pack;
 
  zero:
@@ -1141,7 +1253,7 @@ static u32 vfp_single_fdiv(int sd, int sn, s32 m, u32 fpscr)
 	goto pack;
 
  divzero:
-	exceptions = FPSCR_DZC;
+	exceptions |= FPSCR_DZC;
  infinity:
 	vsd.exponent = 255;
 	vsd.significand = 0;
@@ -1149,7 +1261,7 @@ static u32 vfp_single_fdiv(int sd, int sn, s32 m, u32 fpscr)
 
  invalid:
 	vfp_put_float(vfp_single_pack(&vfp_single_default_qnan), sd);
-	return FPSCR_IOC;
+	return (exceptions | FPSCR_IOC);
 }
 
 static struct op fops[16] = {

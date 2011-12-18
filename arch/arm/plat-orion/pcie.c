@@ -75,7 +75,7 @@ int orion_pcie_get_local_bus_nr(void __iomem *base)
 	return (stat >> PCIE_STAT_BUS_OFFS) & PCIE_STAT_BUS_MASK;
 }
 
-void __init orion_pcie_set_local_bus_nr(void __iomem *base, int nr)
+void orion_pcie_set_local_bus_nr(void __iomem *base, int nr)
 {
 	u32 stat;
 
@@ -90,11 +90,14 @@ void __init orion_pcie_set_local_bus_nr(void __iomem *base, int nr)
  * BAR[0,2] -> disabled, BAR[1] -> covers all DRAM banks
  * WIN[0-3] -> DRAM bank[0-3]
  */
-static void __init orion_pcie_setup_wins(void __iomem *base,
+static void orion_pcie_setup_wins(void __iomem *base,
 					 struct mbus_dram_target_info *dram)
 {
 	u32 size;
 	int i;
+
+	if (dram == NULL)
+		return;
 
 	/*
 	 * First, disable and clear BARs and windows.
@@ -140,7 +143,7 @@ static void __init orion_pcie_setup_wins(void __iomem *base,
 	writel(((size - 1) & 0xffff0000) | 1, base + PCIE_BAR_CTRL_OFF(1));
 }
 
-void __init orion_pcie_setup(void __iomem *base,
+void orion_pcie_setup(void __iomem *base,
 			     struct mbus_dram_target_info *dram)
 {
 	u16 cmd;

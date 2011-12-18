@@ -602,6 +602,12 @@ static void dma_cache_maint_contiguous(struct page *page, unsigned long offset,
 			vaddr += offset;
 			inner_op(vaddr, vaddr + size);
 			kunmap_high(page);
+		} else if (cache_is_vipt()) {
+			pte_t saved_pte;
+			vaddr = kmap_high_l1_vipt(page, &saved_pte);
+			vaddr += offset;
+			inner_op(vaddr, vaddr + size);
+			kunmap_high_l1_vipt(page, saved_pte);
 		}
 	}
 

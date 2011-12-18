@@ -1,5 +1,33 @@
 if ARCH_INTEGRATOR
 
+menu "Marvell Tahoe Options"
+
+choice
+	depends on ARCH_INTEGRATOR_AP
+	prompt "Tahoe_AHB/Tahoe_AXI/DoveNB"
+	default ARCH_TAHOE_AXI
+
+config ARCH_TAHOE_AXI
+	bool "Support Tahoe AXI platform"
+	default n
+	help
+	  Include support for Marvell Tahoe AXI Platform
+
+config ARCH_TAHOE_AHB
+	bool "Support Tahoe AHB platform"
+	default n
+	help
+	  Include support for Marvell Tahoe AHB Platform
+
+config ARCH_DOVENB_ON_TAHOE_AXI
+	bool "Support Dove NB Testchip on Tahoe AXI platform"
+	default n
+	help
+	  Include support for Marvell Tahoe AHB Platform
+endchoice
+
+endmenu
+
 menu "Integrator Options"
 
 config ARCH_INTEGRATOR_AP

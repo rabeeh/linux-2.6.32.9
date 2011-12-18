@@ -148,6 +148,14 @@ config BACKLIGHT_GENERIC
 	  known as the Corgi backlight driver. If you have a Sharp Zaurus
 	  SL-C7xx, SL-Cxx00 or SL-6000x say y.
 
+config BACKLIGHT_DOVE
+	tristate "Marvell Dove LCD/Backlight Driver"
+	depends on BACKLIGHT_CLASS_DEVICE && FB_DOVE_CLCD
+	select LCD_CLASS_DEVICE
+	default n
+	help
+	  Say y to enable the Marvell Dove LCD/Backlight driver.
+
 config BACKLIGHT_LOCOMO
 	tristate "Sharp LOCOMO LCD/Backlight Driver"
 	depends on BACKLIGHT_CLASS_DEVICE && SHARP_LOCOMO

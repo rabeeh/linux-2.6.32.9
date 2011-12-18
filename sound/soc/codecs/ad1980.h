@@ -19,5 +19,6 @@
 
 extern struct snd_soc_dai ad1980_dai;
 extern struct snd_soc_codec_device soc_codec_dev_ad1980;
+extern struct snd_soc_codec_device soc_codec_dev_ad1888;
 
 #endif

@@ -12,6 +12,7 @@
  */
 #include <linux/sched.h>
 #include <linux/mm.h>
+#include <linux/suspend.h>
 #include <asm/mach/arch.h>
 #include <asm/thread_info.h>
 #include <asm/memory.h>
@@ -112,5 +113,8 @@ int main(void)
 #ifdef MULTI_PABORT
   DEFINE(PROCESSOR_PABT_FUNC,	offsetof(struct processor, _prefetch_abort));
 #endif
+  DEFINE(PBE_ADDRESS, 		offsetof(struct pbe, address));
+  DEFINE(PBE_ORIG_ADDRESS, offsetof(struct pbe, orig_address));
+  DEFINE(PBE_NEXT, offsetof(struct pbe, next));
   return 0; 
 }

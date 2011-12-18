@@ -102,6 +102,7 @@ struct cpu_cache_fns cpu_cache;
 #endif
 #ifdef CONFIG_OUTER_CACHE
 struct outer_cache_fns outer_cache;
+EXPORT_SYMBOL(outer_cache);
 #endif
 
 struct stack {
@@ -556,7 +557,7 @@ request_standard_resources(struct meminfo *mi, struct machine_desc *mdesc)
  */
 static int __init parse_tag_core(const struct tag *tag)
 {
-	if (tag->hdr.size > 2) {
+	if ((atag_valid(tag) && (tag->hdr.size > 2))) {
 		if ((tag->u.core.flags & 1) == 0)
 			root_mountflags &= ~MS_RDONLY;
 		ROOT_DEV = old_decode_dev(tag->u.core.rootdev);
@@ -635,6 +636,59 @@ static int __init parse_tag_cmdline(const struct tag *tag)
 
 __tagtable(ATAG_CMDLINE, parse_tag_cmdline);
 
+
+#if defined (CONFIG_PM) && defined (CONFIG_ARCH_DOVE)
+
+MV_DRAM_INIT 	mv_dram_init_info;
+u32		mv_dram_init_valid = 0;
+
+static int __init parse_tag_mv_dram(const struct tag *tag)
+{
+	int hdr = 0, cfg = 0;
+
+	printk(KERN_INFO "Marvell Dove DRAM parameters found (version = 0x%08X)\n", tag->u.mv_dram.version);
+
+	memcpy(&mv_dram_init_info, &(tag->u.mv_dram.mv_dram_init), sizeof(MV_DRAM_INIT));
+	mv_dram_init_valid = 1;
+
+#ifdef CONFIG_PM_DEBUG
+	/* for debug print the DDR parameters */
+	for (hdr = 0; hdr < MV_DRAM_HEADERS_CNT; hdr++) {
+		if (mv_dram_init_info.dram_init_ctrl[hdr].freq_mask == 0)
+			break;
+		printk(KERN_INFO "Configuration #%d: Frequency Mask = 0x%08X, Flags = 0x%08X, start index = %d, size = %d\n", 
+			hdr, mv_dram_init_info.dram_init_ctrl[hdr].freq_mask, mv_dram_init_info.dram_init_ctrl[hdr].flags, 
+			mv_dram_init_info.dram_init_ctrl[hdr].start_index, mv_dram_init_info.dram_init_ctrl[hdr].size);
+		for (cfg = mv_dram_init_info.dram_init_ctrl[hdr].start_index; 
+		     cfg < mv_dram_init_info.dram_init_ctrl[hdr].start_index + mv_dram_init_info.dram_init_ctrl[hdr].size; 
+		     cfg++) {
+				printk(KERN_INFO "cfg = %d, Reg = 0x%08X, Value = 0x%08X\n", cfg, 
+					mv_dram_init_info.reg_init[cfg].reg_addr, mv_dram_init_info.reg_init[cfg].reg_value);
+		}
+	}
+#endif
+	return 0;
+}
+
+__tagtable(ATAG_MV_DRAM_PARAMS, parse_tag_mv_dram);
+
+u32		dvs_values_param = 0;
+static int __init parse_tag_mv_dvs(const struct tag *tag)
+{
+	int hdr = 0, cfg = 0;
+ 
+	printk(KERN_INFO "Marvell Dove DVS parameters found (version = 0x%08X)\n", tag->u.mv_dram.version);
+
+	/* DVS deafult calibration values from boot loader calibration */
+	dvs_values_param = tag->u.mv_dvs.dvs_values;
+
+	return 0;
+}
+
+__tagtable(ATAG_MV_DVS_PARAMS, parse_tag_mv_dvs);
+#endif
+
+
 /*
  * Scan the tag table for this tag, and call its parse function.
  * The tag table is built by the linker from all the __tagtable
@@ -660,7 +714,7 @@ static int __init parse_tag(const struct tag *tag)
  */
 static void __init parse_tags(const struct tag *t)
 {
-	for (; t->hdr.size; t = tag_next(t))
+	for (; atag_valid(t); t = tag_next(t))
 		if (!parse_tag(t))
 			printk(KERN_WARNING
 				"Ignoring unrecognised tag 0x%08x\n",
@@ -724,9 +778,10 @@ void __init setup_arch(char **cmdline_p)
 	if (tags->hdr.tag != ATAG_CORE)
 		tags = (struct tag *)&init_tags;
 
+#ifndef CONFIG_ARCH_DOVE
 	if (mdesc->fixup)
 		mdesc->fixup(mdesc, tags, &from, &meminfo);
-
+#endif
 	if (tags->hdr.tag == ATAG_CORE) {
 		if (meminfo.nr_banks != 0)
 			squash_mem_tags(tags);
@@ -742,6 +797,10 @@ void __init setup_arch(char **cmdline_p)
 	memcpy(boot_command_line, from, COMMAND_LINE_SIZE);
 	boot_command_line[COMMAND_LINE_SIZE-1] = '\0';
 	parse_cmdline(cmdline_p, from);
+#ifdef CONFIG_ARCH_DOVE
+	if (mdesc->fixup)
+		mdesc->fixup(mdesc, tags, &from, &meminfo);
+#endif
 	paging_init(mdesc);
 	request_standard_resources(&meminfo, mdesc);
 

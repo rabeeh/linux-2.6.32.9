@@ -1694,6 +1694,29 @@ static inline u8 ata_wait_idle(struct ata_port *ap)
 
 	return status;
 }
+/**
+ *	ata_wait_drq_clear - Wait for the DRQ bit to be cleared.
+ *	@ap: Port to wait for.
+ *
+ *	Waits up to 10ms for port's DRQ signal to clear.
+ *	Returns final value of status register.
+ *
+ *	LOCKING:
+ *	Inherited from caller.
+ */
+static inline u8 ata_wait_drq_clear(struct ata_port *ap)
+{
+	u8 status = ata_sff_busy_wait(ap, ATA_DRQ, 1000);
+
+#ifdef ATA_DEBUG
+	if (status != 0xff && (status & ATA_DRQ))
+		ata_port_printk(ap, KERN_DEBUG, "abnormal Status 0x%X\n",
+				status);
+#endif
+
+	return status;
+}
+
 #endif /* CONFIG_ATA_SFF */
 
 #endif /* __LINUX_LIBATA_H__ */

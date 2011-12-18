@@ -19,6 +19,39 @@
 #include "core.h"
 #include "mmc_ops.h"
 
+int mmc_force_reset (struct mmc_host *host)
+
+{
+        struct mmc_command cmd;
+        int err = 0;
+
+        BUG_ON(!host);
+
+#ifndef SD_IO_RW_DIRECT
+#define SD_IO_RW_DIRECT 52
+#endif
+
+#ifndef SDIO_CCCR_ABORT
+#define SDIO_CCCR_ABORT  0x06
+#endif
+
+#ifndef PMR_WRITE
+#define PMR_WRITE 1
+#endif
+
+       memset(&cmd, 0, sizeof(struct mmc_command));
+       cmd.opcode = SD_IO_RW_DIRECT;
+       cmd.arg = PMR_WRITE ? 0x80000000 : 0x00000000;
+       cmd.arg |= 0<<28;
+       cmd.arg |= 0x00000000;
+       cmd.arg |= SDIO_CCCR_ABORT << 9;
+       cmd.arg |= (1<<3) ;
+       cmd.flags = MMC_RSP_NONE;
+       err = mmc_wait_for_cmd(host, &cmd, 0);
+       return err;
+}
+
+
 static int _mmc_select_card(struct mmc_host *host, struct mmc_card *card)
 {
 	int err;
@@ -147,6 +180,11 @@ int mmc_send_op_cond(struct mmc_host *host, u32 ocr, u32 *rocr)
 
 	for (i = 100; i; i--) {
 		err = mmc_wait_for_cmd(host, &cmd, 0);
+		if (err == -ETIMEDOUT) {
+			mmc_delay(10);
+			continue;
+		}
+
 		if (err)
 			break;
 

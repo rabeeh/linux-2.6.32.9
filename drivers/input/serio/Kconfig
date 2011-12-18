@@ -146,6 +146,7 @@ config HIL_MLC
 	tristate "HIL MLC Support (needed for HIL input devices)"
 	depends on HP_SDC
 
+
 config SERIO_PCIPS2
 	tristate "PCI PS/2 keyboard and PS/2 mouse controller"
 	depends on PCI

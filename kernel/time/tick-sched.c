@@ -256,6 +256,12 @@ void tick_nohz_stop_sched_tick(int inidle)
 	if (unlikely(ts->nohz_mode == NOHZ_MODE_INACTIVE))
 		goto end;
 
+	if (!inidle && !ts->inidle)
+		goto end;
+
+	now = tick_nohz_start_idle(ts);
+	ts->inidle = 1;
+
 	if (need_resched())
 		goto end;
 

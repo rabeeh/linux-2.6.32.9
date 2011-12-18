@@ -321,6 +321,13 @@ config VIDEO_OV7670
 	  OV7670 VGA camera.  It currently only works with the M88ALP01
 	  controller.
 
+config VIDEO_OV7680
+	tristate "OmniVision OV7680 sensor support"
+	depends on I2C && VIDEO_V4L2
+	---help---
+	  This is a Video4Linux2 sensor-level driver for the OmniVision
+	  OV7680 VGA camera.
+
 config VIDEO_MT9V011
 	tristate "Micron mt9v011 sensor support"
 	depends on I2C && VIDEO_V4L2
@@ -804,8 +811,9 @@ config VIDEO_M32R_AR_M64278
 
 config VIDEO_CAFE_CCIC
 	tristate "Marvell 88ALP01 (Cafe) CMOS Camera Controller support"
-	depends on PCI && I2C && VIDEO_V4L2
+	depends on I2C && VIDEO_V4L2
 	select VIDEO_OV7670
+	select VIDEO_OV7680
 	---help---
 	  This is a video4linux2 driver for the Marvell 88ALP01 integrated
 	  CMOS camera controller.  This is the controller found on first-

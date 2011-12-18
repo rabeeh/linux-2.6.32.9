@@ -25,8 +25,28 @@
 /* The xor routines to use.  */
 static struct xor_block_template *active_template;
 
+#ifdef CONFIG_MV_RAID5_XOR_OFFLOAD
+static void
+cpu_xor_block(unsigned int src_count, unsigned int bytes, void *dest, void **srcs);
+void 
+xor_blocks(unsigned int src_count, unsigned int bytes, void *dest, void **srcs)
+{
+    static int no_xor_offload = 0;
+    if((src_count <= 8) /*&& (no_xor_offload < 10)*/)
+    {
+        if(xor_mv(src_count, bytes, srcs, dest))
+            cpu_xor_block(src_count, bytes, dest, srcs);
+        no_xor_offload++;
+    }
+    else
+	cpu_xor_block(src_count, bytes, dest, srcs);
+}
+static void
+cpu_xor_block(unsigned int src_count, unsigned int bytes, void *dest, void **srcs)
+#else
 void
 xor_blocks(unsigned int src_count, unsigned int bytes, void *dest, void **srcs)
+#endif
 {
 	unsigned long *p1, *p2, *p3, *p4;
 

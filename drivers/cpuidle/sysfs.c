@@ -13,6 +13,8 @@
 
 #include "cpuidle.h"
 
+unsigned cpuidle_user_state = 0;
+
 static unsigned int sysfs_switch;
 static int __init cpuidle_sysfs_setup(char *unused)
 {
@@ -103,6 +105,53 @@ static ssize_t store_current_governor(struct sysdev_class *class,
 		return count;
 }
 
+static ssize_t show_available_user_states(struct sysdev_class *class,
+					char *buf)
+{
+	ssize_t ret = 0;
+	struct cpuidle_device *dev = __get_cpu_var(cpuidle_devices);
+	int i;
+
+	mutex_lock(&cpuidle_lock);
+	for (i=0; i<dev->state_count; i++)
+		ret += sprintf((buf+ret), "%d ", i);
+	ret += sprintf((buf+ret), "\n");
+	mutex_unlock(&cpuidle_lock);
+
+	return ret;
+}
+
+static ssize_t show_current_user_state(struct sysdev_class *class,
+				     char *buf)
+{
+	ssize_t ret = 0;
+
+	mutex_lock(&cpuidle_lock);
+	ret = sprintf(buf, "%d\n", cpuidle_user_state);
+	mutex_unlock(&cpuidle_lock);
+
+	return ret;
+}
+
+static ssize_t store_current_user_state(struct sysdev_class *class,
+				      const char *buf, size_t count)
+{
+	unsigned int new_state;
+	struct cpuidle_device *dev = __get_cpu_var(cpuidle_devices);
+
+	sscanf(buf, "%d", &new_state);
+	if (new_state >= dev->state_count)
+		return -EINVAL;
+
+	mutex_lock(&cpuidle_lock);
+	if (strcmp(cpuidle_curr_governor->name, "user") != 0)
+		printk(KERN_WARNING "Warning: current_user_state will take effect when selecting user governor only!\n");
+	cpuidle_user_state = new_state;
+	mutex_unlock(&cpuidle_lock);
+
+	return count;
+}
+
 static SYSDEV_CLASS_ATTR(current_driver, 0444, show_current_driver, NULL);
 static SYSDEV_CLASS_ATTR(current_governor_ro, 0444, show_current_governor,
 			 NULL);
@@ -117,11 +166,17 @@ static SYSDEV_CLASS_ATTR(available_governors, 0444, show_available_governors,
 			 NULL);
 static SYSDEV_CLASS_ATTR(current_governor, 0644, show_current_governor,
 			 store_current_governor);
+static SYSDEV_CLASS_ATTR(available_user_states, 0444, show_available_user_states,
+			 NULL);
+static SYSDEV_CLASS_ATTR(current_user_state, 0644, show_current_user_state,
+			 store_current_user_state);
 
 static struct attribute *cpuclass_switch_attrs[] = {
 	&attr_available_governors.attr,
 	&attr_current_driver.attr,
 	&attr_current_governor.attr,
+	&attr_available_user_states.attr,
+	&attr_current_user_state.attr,
 	NULL
 };
 

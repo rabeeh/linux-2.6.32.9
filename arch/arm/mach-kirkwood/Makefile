@@ -9,3 +9,8 @@ obj-$(CONFIG_MACH_TS219)		+= ts219-setup.o
 obj-$(CONFIG_MACH_OPENRD_BASE)		+= openrd_base-setup.o
 
 obj-$(CONFIG_CPU_IDLE)			+= cpuidle.o
+ifeq ($(CONFIG_MV_HAL_DRIVERS),y)
+include $(srctree)/$(subst ",,$(CONFIG_MV_HAL_RULES_PATH))
+endif
+
+obj-$(CONFIG_MV_HAL_DRIVERS)		+= mv_hal_support/

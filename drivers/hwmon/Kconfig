@@ -39,6 +39,14 @@ config HWMON_DEBUG_CHIP
 
 comment "Native drivers"
 
+####################################################
+config BMA020
+	tristate "BOSH bma020 acceleration sensor"
+	depends on I2C
+	help
+	support for bosch g-sensor
+####################################################
+
 config SENSORS_ABITUGURU
 	tristate "Abit uGuru (rev 1 & 2)"
 	depends on X86 && EXPERIMENTAL
@@ -1007,6 +1015,17 @@ config SENSORS_APPLESMC
 
 	  Say Y here if you have an applicable laptop and want to experience
 	  the awesome power of applesmc.
+
+config SENSORS_DOVE
+	tristate "Dove SoC Thermal Sensor"
+	depends on ARCH_DOVE
+	default y
+	help
+	  This driver provides support for the Marvell's Dove SoC thermal
+	  Controller, which provides onchip temperature sensors.
+
+config HWMON_DEBUG_CHIP
+	bool "Hardware Monitoring Chip debugging messages"
 
 if ACPI
 

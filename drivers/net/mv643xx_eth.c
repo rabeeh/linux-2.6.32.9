@@ -47,6 +47,7 @@
 #include <linux/platform_device.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/clk.h>
 #include <linux/spinlock.h>
 #include <linux/workqueue.h>
 #include <linux/phy.h>
@@ -259,6 +260,10 @@ struct mv643xx_eth_shared_private {
 	 */
 	void __iomem *base;
 
+#if defined(CONFIG_HAVE_CLK)
+	struct clk	*clk;
+#endif
+
 	/*
 	 * Points at the right SMI instance to use.
 	 */
@@ -383,7 +388,7 @@ struct mv643xx_eth_private {
 	int port_num;
 
 	struct net_device *dev;
-
+	struct platform_device *pdev;
 	struct phy_device *phy;
 
 	struct timer_list mib_counters_timer;
@@ -406,6 +411,7 @@ struct mv643xx_eth_private {
 	int skb_size;
 	struct sk_buff_head rx_recycle;
 
+	u8 wol;
 	/*
 	 * RX state.
 	 */
@@ -656,6 +662,7 @@ static int rxq_refill(struct rx_queue *rxq, int budget)
 		struct sk_buff *skb;
 		int rx;
 		struct rx_desc *rx_desc;
+		int size;
 
 		skb = __skb_dequeue(&mp->rx_recycle);
 		if (skb == NULL)
@@ -678,10 +685,11 @@ static int rxq_refill(struct rx_queue *rxq, int budget)
 
 		rx_desc = rxq->rx_desc_area + rx;
 
+		size = skb->end - skb->data;
 		rx_desc->buf_ptr = dma_map_single(mp->dev->dev.parent,
-						  skb->data, mp->skb_size,
+						  skb->data, size,
 						  DMA_FROM_DEVICE);
-		rx_desc->buf_size = mp->skb_size;
+		rx_desc->buf_size = size;
 		rxq->rx_skb[rx] = skb;
 		wmb();
 		rx_desc->cmd_sts = BUFFER_OWNED_BY_DMA | RX_ENABLE_INTERRUPT;
@@ -1643,6 +1651,89 @@ static int mv643xx_eth_get_sset_count(struct net_device *dev, int sset)
 	return -EOPNOTSUPP;
 }
 
+/* Wake on Lan only supported on phy 1310 */
+static u32 wol_supported(const struct mv643xx_eth_private *mp)
+{
+	u32 phy_id;
+
+	if (mp->phy == NULL)
+		return 0;
+
+	phy_id = phy_read(mp->phy, MII_PHYSID1) << 16;
+	phy_id |= phy_read(mp->phy, MII_PHYSID2);
+
+	if((phy_id & 0xfffffff0) == (0x01410e90 & 0xfffffff0))
+		return WAKE_MAGIC | WAKE_PHY;
+	printk("wol not support for phy 0x%x\n", phy_id);
+	return 0;
+}
+
+static void phy_set_wol(struct mv643xx_eth_private *mp)
+{
+	unsigned char *addr = mp->dev->dev_addr;
+	u16 wol_control = 0x500;
+
+	phy_write(mp->phy, 22, 0);
+	phy_write(mp->phy, 18, phy_read(mp->phy, 18) | (1 << 7)); // WOL interrupt enable
+	phy_write(mp->phy, 22, 3);
+	phy_write(mp->phy, 18, (phy_read(mp->phy, 18) & 0x7fff) | 0x4880);// active low, INTn to LED2
+	phy_write(mp->phy, 22, 17);
+
+	if (mp->wol & WAKE_MAGIC) {
+		phy_write(mp->phy, 23, addr[5] << 8 | addr[4]);
+		phy_write(mp->phy, 24, addr[3] << 8 | addr[2]);
+		phy_write(mp->phy, 25, addr[1] << 8 | addr[0]);
+		wol_control |= 1 << 14;
+	}
+	if (mp->wol & WAKE_PHY)
+		wol_control |= 1 << 13;
+
+	phy_write(mp->phy, 16, wol_control);
+	phy_write(mp->phy, 22, 0);
+}
+
+static void phy_clear_wol(struct mv643xx_eth_private *mp)
+{
+	u16 wol_control = 0x500;
+
+	printk("reg 0 19 %x\n", phy_read(mp->phy, 19));
+	phy_write(mp->phy, 22, 17);
+	phy_read(mp->phy, 17);
+	printk("reg 17 17 (WOL status) %x\n", phy_read(mp->phy, 17));
+	if (mp->wol & WAKE_MAGIC)
+		wol_control |= 1 << 14; //Magic packet match enable
+	if (mp->wol & WAKE_PHY)
+		wol_control |= 1 << 13; // Link
+	
+	wol_control |= 1 << 12; //Clear WOL status
+	phy_write(mp->phy, 16, wol_control);
+       
+	phy_write(mp->phy, 22, 0);
+	phy_read(mp->phy, 19);
+}
+
+static void mv643xx_eth_get_wol(struct net_device *dev, struct ethtool_wolinfo *wol)
+{
+	struct mv643xx_eth_private *mp = netdev_priv(dev);
+
+	wol->supported = wol_supported(mp);
+	wol->wolopts = mp->wol;
+}
+
+static int mv643xx_eth_set_wol(struct net_device *dev, struct ethtool_wolinfo *wol)
+{
+	struct mv643xx_eth_private *mp = netdev_priv(dev);
+
+	if ((wol->wolopts & ~wol_supported(mp))
+	    || !device_can_wakeup(&mp->pdev->dev))
+		return -EOPNOTSUPP;
+
+	mp->wol = wol->wolopts;
+	device_set_wakeup_enable(&mp->pdev->dev, mp->wol);
+
+	return 0;
+}
+
 static const struct ethtool_ops mv643xx_eth_ethtool_ops = {
 	.get_settings		= mv643xx_eth_get_settings,
 	.set_settings		= mv643xx_eth_set_settings,
@@ -1662,6 +1753,8 @@ static const struct ethtool_ops mv643xx_eth_ethtool_ops = {
 	.get_flags		= ethtool_op_get_flags,
 	.set_flags		= ethtool_op_set_flags,
 	.get_sset_count		= mv643xx_eth_get_sset_count,
+	.get_wol		= mv643xx_eth_get_wol,
+	.set_wol		= mv643xx_eth_set_wol,
 };
 
 
@@ -2215,7 +2308,7 @@ static void phy_reset(struct mv643xx_eth_private *mp)
 	} while (data >= 0 && data & BMCR_RESET);
 }
 
-static void port_start(struct mv643xx_eth_private *mp)
+static void port_start(struct mv643xx_eth_private *mp, bool reset_phy)
 {
 	u32 pscr;
 	int i;
@@ -2223,7 +2316,7 @@ static void port_start(struct mv643xx_eth_private *mp)
 	/*
 	 * Perform PHY reset, if there is a PHY.
 	 */
-	if (mp->phy != NULL) {
+	if (reset_phy && mp->phy != NULL) {
 		struct ethtool_cmd cmd;
 
 		mv643xx_eth_get_settings(mp->dev, &cmd);
@@ -2368,7 +2461,7 @@ static int mv643xx_eth_open(struct net_device *dev)
 		mp->int_mask |= INT_TX_END_0 << i;
 	}
 
-	port_start(mp);
+	port_start(mp, true);
 
 	wrlp(mp, INT_MASK_EXT, INT_EXT_LINK_PHY | INT_EXT_TX);
 	wrlp(mp, INT_MASK, mp->int_mask);
@@ -2464,6 +2557,14 @@ static int mv643xx_eth_change_mtu(struct net_device *dev, int new_mtu)
 	mv643xx_eth_recalc_skb_size(mp);
 	tx_set_rate(mp, 1000000000, 16777216);
 
+	if (dev->mtu > 1600) {
+		dev->features &= ~NETIF_F_IP_CSUM;
+		dev->vlan_features &= ~NETIF_F_IP_CSUM;
+	} else {
+		dev->features |= NETIF_F_IP_CSUM;
+		dev->vlan_features |= NETIF_F_IP_CSUM;
+	}
+
 	if (!netif_running(dev))
 		return 0;
 
@@ -2491,7 +2592,7 @@ static void tx_timeout_task(struct work_struct *ugly)
 	if (netif_running(mp->dev)) {
 		netif_tx_stop_all_queues(mp->dev);
 		port_reset(mp);
-		port_start(mp);
+		port_start(mp, true);
 		netif_tx_wake_all_queues(mp->dev);
 	}
 }
@@ -2613,6 +2714,14 @@ static int mv643xx_eth_shared_probe(struct platform_device *pdev)
 	if (msp->base == NULL)
 		goto out_free;
 
+#if defined(CONFIG_HAVE_CLK)
+	msp->clk = clk_get(&pdev->dev, NULL);
+	if (IS_ERR(msp->clk))
+		dev_notice(&pdev->dev, "cannot get clkdev\n");
+	else
+		clk_enable(msp->clk);
+#endif
+
 	/*
 	 * Set up and register SMI bus.
 	 */
@@ -2672,6 +2781,12 @@ static int mv643xx_eth_shared_probe(struct platform_device *pdev)
 out_free_mii_bus:
 	mdiobus_free(msp->smi_bus);
 out_unmap:
+#if defined(CONFIG_HAVE_CLK)
+	if (!IS_ERR(msp->clk)) {
+		clk_disable(msp->clk);
+		clk_put(msp->clk);
+	}
+#endif
 	iounmap(msp->base);
 out_free:
 	kfree(msp);
@@ -2683,6 +2798,13 @@ static int mv643xx_eth_shared_remove(struct platform_device *pdev)
 {
 	struct mv643xx_eth_shared_private *msp = platform_get_drvdata(pdev);
 	struct mv643xx_eth_shared_platform_data *pd = pdev->dev.platform_data;
+
+#if defined(CONFIG_HAVE_CLK)
+	if (!IS_ERR(msp->clk)) {
+		clk_disable(msp->clk);
+		clk_put(msp->clk);
+	}
+#endif
 
 	if (pd == NULL || pd->shared_smi == NULL) {
 		mdiobus_unregister(msp->smi_bus);
@@ -2696,9 +2818,41 @@ static int mv643xx_eth_shared_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_PM
+static int mv643xx_eth_shared_suspend(struct platform_device *pdev,
+				      pm_message_t state)
+{
+	return 0;
+}
+static int mv643xx_eth_shared_resume(struct platform_device *pdev)
+{
+	struct mv643xx_eth_shared_private *msp = platform_get_drvdata(pdev);
+	struct mv643xx_eth_shared_platform_data *pd = pdev->dev.platform_data;
+
+	/*
+	 * (Re-)program MBUS remapping windows if we are asked to.
+	 */
+	if (pd != NULL && pd->dram != NULL)
+		mv643xx_eth_conf_mbus_windows(msp, pd->dram);
+
+	/*
+	 * Detect hardware parameters.
+	 */
+	msp->t_clk = (pd != NULL && pd->t_clk != 0) ? pd->t_clk : 133000000;
+	infer_hw_params(msp);
+	return 0;
+}
+
+#else
+#define mv643xx_eth_shared_suspend	NULL
+#define mv643xx_eth_shared_resume	NULL
+#endif
+
 static struct platform_driver mv643xx_eth_shared_driver = {
 	.probe		= mv643xx_eth_shared_probe,
 	.remove		= mv643xx_eth_shared_remove,
+	.suspend	= mv643xx_eth_shared_suspend,
+	.resume		= mv643xx_eth_shared_resume,
 	.driver = {
 		.name	= MV643XX_ETH_SHARED_NAME,
 		.owner	= THIS_MODULE,
@@ -2884,6 +3038,7 @@ static int mv643xx_eth_probe(struct platform_device *pdev)
 	mp->port_num = pd->port_number;
 
 	mp->dev = dev;
+	mp->pdev = pdev;
 
 	set_params(mp, pd);
 	dev->real_num_tx_queues = mp->txq_count;
@@ -2893,6 +3048,9 @@ static int mv643xx_eth_probe(struct platform_device *pdev)
 
 	if (mp->phy != NULL)
 		phy_init(mp, pd->speed, pd->duplex);
+
+	mp->wol = wol_supported(mp) & WAKE_MAGIC;
+	device_init_wakeup(&mp->pdev->dev, mp->wol);
 
 	SET_ETHTOOL_OPS(dev, &mv643xx_eth_ethtool_ops);
 
@@ -2985,12 +3143,101 @@ static void mv643xx_eth_shutdown(struct platform_device *pdev)
 
 	if (netif_running(mp->dev))
 		port_reset(mp);
+
+	if (mp->phy != NULL && mp->wol)
+		phy_set_wol(mp);
 }
+
+#if CONFIG_PM
+static int mv643xx_eth_suspend(struct platform_device *pdev, pm_message_t state)
+{
+	struct mv643xx_eth_private *mp = platform_get_drvdata(pdev);
+
+	if (netif_running(mp->dev)) {
+		netif_device_detach(mp->dev);
+
+		wrlp(mp, INT_MASK_EXT, 0);
+		wrlp(mp, INT_MASK, 0);
+		rdlp(mp, INT_MASK);
+
+		port_reset(mp);
+		mv643xx_eth_get_stats(mp->dev);
+		mib_counters_update(mp);
+	}
+
+	if (mp->phy != NULL) {
+		if (mp->wol)
+			phy_set_wol(mp);
+		else
+			phy_detach(mp->phy);
+	}
+
+	return 0;
+}
+
+static int mv643xx_eth_resume(struct platform_device *pdev)
+{
+	struct mv643xx_eth_private *mp = platform_get_drvdata(pdev);
+	struct mv643xx_eth_platform_data *pd = pdev->dev.platform_data;
+	
+	if (pd->phy_addr != MV643XX_ETH_PHY_NONE)
+		mp->phy = phy_scan(mp, pd->phy_addr);
+
+	if (mp->wol)
+		phy_clear_wol(mp);
+	else if (mp->phy != NULL)
+		phy_init(mp, pd->speed, pd->duplex);
+
+	if (netif_running(mp->dev)) {
+		wrlp(mp, INT_CAUSE, 0);
+		wrlp(mp, INT_CAUSE_EXT, 0);
+		rdlp(mp, INT_CAUSE_EXT);
+
+		init_pscr(mp, pd->speed, pd->duplex);
+
+		mib_counters_clear(mp);
+
+		if (mp->shared->win_protect)
+			wrl(mp, WINDOW_PROTECT(mp->port_num),
+			    mp->shared->win_protect);
+
+		wrlp(mp, SDMA_CONFIG, PORT_SDMA_CONFIG_DEFAULT_VALUE);
+
+		set_rx_coal(mp, 250);
+		set_tx_coal(mp, 0);
+
+		port_start(mp, false);
+
+		wrlp(mp, INT_MASK_EXT, INT_EXT_LINK_PHY | INT_EXT_TX);
+		wrlp(mp, INT_MASK, mp->int_mask);
+		netif_device_attach(mp->dev);
+	} else {
+		init_pscr(mp, pd->speed, pd->duplex);
+		mib_counters_clear(mp);
+
+		if (mp->shared->win_protect)
+			wrl(mp, WINDOW_PROTECT(mp->port_num),
+			    mp->shared->win_protect);
+
+		wrlp(mp, SDMA_CONFIG, PORT_SDMA_CONFIG_DEFAULT_VALUE);
+
+		set_rx_coal(mp, 250);
+		set_tx_coal(mp, 0);
+	}
+	return 0;
+}
+
+#else
+#define mv643xx_eth_suspend	NULL
+#define mv643xx_eth_resume	NULL
+#endif
 
 static struct platform_driver mv643xx_eth_driver = {
 	.probe		= mv643xx_eth_probe,
 	.remove		= mv643xx_eth_remove,
 	.shutdown	= mv643xx_eth_shutdown,
+	.suspend	= mv643xx_eth_suspend,
+	.resume		= mv643xx_eth_resume,
 	.driver = {
 		.name	= MV643XX_ETH_NAME,
 		.owner	= THIS_MODULE,

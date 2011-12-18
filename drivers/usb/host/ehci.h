@@ -361,6 +361,7 @@ struct ehci_qh {
 	u16			tt_usecs;	/* tt downstream bandwidth */
 	unsigned short		period;		/* polling interval */
 	unsigned short		start;		/* where polling starts */
+	unsigned short		u_period;	/* polling interval in uframes */
 #define NO_FRAME ((unsigned short)~0)			/* pick new start */
 
 	struct usb_device	*dev;		/* access to TT */

@@ -127,6 +127,13 @@ struct preempt_notifier {
 void preempt_notifier_register(struct preempt_notifier *notifier);
 void preempt_notifier_unregister(struct preempt_notifier *notifier);
 
+#ifdef CONFIG_GLOBAL_PREEMPT_NOTIFIERS
+
+void global_preempt_notifier_register(struct preempt_notifier *notifier);
+void global_preempt_notifier_unregister(struct preempt_notifier *notifier);
+
+#endif
+
 static inline void preempt_notifier_init(struct preempt_notifier *notifier,
 				     struct preempt_ops *ops)
 {

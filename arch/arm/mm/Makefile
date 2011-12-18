@@ -27,6 +27,9 @@ obj-$(CONFIG_CPU_ABRT_EV5TJ)	+= abort-ev5tj.o
 obj-$(CONFIG_CPU_ABRT_EV6)	+= abort-ev6.o
 obj-$(CONFIG_CPU_ABRT_EV7)	+= abort-ev7.o
 
+AFLAGS_abort-ev6.o	:=-Wa,-march=armv6k
+AFLAGS_abort-ev7.o	:=-Wa,-march=armv7-a
+
 obj-$(CONFIG_CPU_PABRT_LEGACY)	+= pabort-legacy.o
 obj-$(CONFIG_CPU_PABRT_V6)	+= pabort-v6.o
 obj-$(CONFIG_CPU_PABRT_V7)	+= pabort-v7.o
@@ -38,11 +41,15 @@ obj-$(CONFIG_CPU_CACHE_V4WB)	+= cache-v4wb.o
 obj-$(CONFIG_CPU_CACHE_V6)	+= cache-v6.o
 obj-$(CONFIG_CPU_CACHE_V7)	+= cache-v7.o
 obj-$(CONFIG_CPU_CACHE_FA)	+= cache-fa.o
+AFLAGS_cache-v7.o		:= -Wa,-march=armv7a
+
+AFLAGS_cache-v6.o	:=-Wa,-march=armv6
+AFLAGS_cache-v7.o	:=-Wa,-march=armv7-a
 
 obj-$(CONFIG_CPU_COPY_V3)	+= copypage-v3.o
 obj-$(CONFIG_CPU_COPY_V4WT)	+= copypage-v4wt.o
 obj-$(CONFIG_CPU_COPY_V4WB)	+= copypage-v4wb.o
-obj-$(CONFIG_CPU_COPY_FEROCEON)	+= copypage-feroceon.o
+obj-$(CONFIG_CPU_COPY_FEROCEON)        += copypage-feroceon.o
 obj-$(CONFIG_CPU_COPY_V6)	+= copypage-v6.o context.o
 obj-$(CONFIG_CPU_SA1100)	+= copypage-v4mc.o
 obj-$(CONFIG_CPU_XSCALE)	+= copypage-xscale.o
@@ -57,6 +64,10 @@ obj-$(CONFIG_CPU_TLB_FEROCEON)	+= tlb-v4wbi.o	# reuse v4wbi TLB functions
 obj-$(CONFIG_CPU_TLB_V6)	+= tlb-v6.o
 obj-$(CONFIG_CPU_TLB_V7)	+= tlb-v7.o
 obj-$(CONFIG_CPU_TLB_FA)	+= tlb-fa.o
+AFLAGS_tlb-v7.o			:= -Wa,-march=armv7a
+
+AFLAGS_tlb-v6.o		:=-Wa,-march=armv6
+AFLAGS_tlb-v7.o		:=-Wa,-march=armv7-a
 
 obj-$(CONFIG_CPU_ARM610)	+= proc-arm6_7.o
 obj-$(CONFIG_CPU_ARM710)	+= proc-arm6_7.o
@@ -83,8 +94,12 @@ obj-$(CONFIG_CPU_MOHAWK)	+= proc-mohawk.o
 obj-$(CONFIG_CPU_FEROCEON)	+= proc-feroceon.o
 obj-$(CONFIG_CPU_V6)		+= proc-v6.o
 obj-$(CONFIG_CPU_V7)		+= proc-v7.o
+AFLAGS_proc-v7.o		:= -Wa,-march=armv7a
+
+AFLAGS_proc-v6.o	:=-Wa,-march=armv6
+AFLAGS_proc-v7.o	:=-Wa,-march=armv7-a
 
 obj-$(CONFIG_CACHE_FEROCEON_L2)	+= cache-feroceon-l2.o
 obj-$(CONFIG_CACHE_L2X0)	+= cache-l2x0.o
 obj-$(CONFIG_CACHE_XSC3L2)	+= cache-xsc3l2.o
-
+obj-$(CONFIG_CACHE_TAUROS2)	+= cache-tauros2.o

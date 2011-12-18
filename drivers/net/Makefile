@@ -25,6 +25,8 @@ obj-$(CONFIG_ATL1) += atlx/
 obj-$(CONFIG_ATL2) += atlx/
 obj-$(CONFIG_ATL1E) += atl1e/
 obj-$(CONFIG_ATL1C) += atl1c/
+obj-$(CONFIG_MV_INCLUDE_GIG_ETH) += ../../arch/arm/plat-orion/mv_hal_drivers/mv_drivers_lsp/mv_network/mv_ethernet/
+obj-$(CONFIG_MV_ETH_NFP) += ../../arch/arm/plat-orion/mv_hal_drivers/mv_drivers_lsp/mv_network/nfp_mgr/
 obj-$(CONFIG_GIANFAR) += gianfar_driver.o
 obj-$(CONFIG_TEHUTI) += tehuti.o
 obj-$(CONFIG_ENIC) += enic/
@@ -158,6 +160,8 @@ obj-$(CONFIG_PPP_BSDCOMP) += bsd_comp.o
 obj-$(CONFIG_PPP_MPPE) += ppp_mppe.o
 obj-$(CONFIG_PPPOE) += pppox.o pppoe.o
 obj-$(CONFIG_PPPOL2TP) += pppox.o pppol2tp.o
+obj-$(CONFIG_PPPOLAC) += pppox.o pppolac.o
+obj-$(CONFIG_PPPOPNS) += pppox.o pppopns.o
 
 obj-$(CONFIG_SLIP) += slip.o
 obj-$(CONFIG_SLHC) += slhc.o

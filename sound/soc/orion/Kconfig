@@ -1,0 +1,74 @@
+menu "SoC Audio for the Marvell SoC's"
+
+config SND_DOVE_AC97
+	tristate "Marvell Dove AC97 interface support"
+	depends on ARCH_DOVE && SND_SOC
+	select SND_AC97_CODEC
+	select AC97_BUS
+	help
+	  Say Y or M if you want to add support for the AC97 interface in Marvell
+	  SoC's.
+
+config SND_DOVE_SOC_DB
+	tristate "SoC AC97 Audio support for Marvell Dove DB"
+	depends on SND_DOVE_AC97 && (MACH_DOVE_DB || MACH_DOVE_DB_Z0)
+	select SND_PXA2XX_SOC
+	select SND_PXA2XX_LIB
+	select SND_PXA2XX_SOC_AC97
+	select SND_PXA2XX_SOC_AC97_SURROUND
+	select SND_SOC_AD1980
+	help
+	  Say Y if you want to add support for SoC audio on Marvell
+	  Dove Development Board.
+
+config SND_DOVE_SOC_DB_B
+	tristate "SoC AC97 Audio support for Marvell Dove DB-B"
+	depends on SND_DOVE_AC97 && MACH_DOVE_DB_B
+	select SND_PXA2XX_SOC
+	select SND_PXA2XX_LIB
+	select SND_PXA2XX_SOC_AC97
+	select SND_PXA2XX_SOC_AC97_SURROUND
+	select SND_SOC_AC97_CODEC
+	help
+	  Say Y if you want to add support for SoC audio on Marvell
+	  Dove Development Board.
+
+
+config SND_DOVE_SOC_AC97_AVD1
+        tristate "SoC AC97 Audio support for AVD1"
+        depends on SND_DOVE_AC97
+        select SND_PXA2XX_SOC
+	select SND_PXA2XX_LIB
+        select SND_PXA2XX_SOC_AC97
+        select SND_PXA2XX_SOC_AC97_SURROUND
+        select SND_SOC_RT5610
+
+
+config SND_DOVE_SOC_MRVL_AUDIO
+	tristate "Marvell mv88fx Audio ALSA SOC driver"
+	depends on MV_INCLUDE_AUDIO && SND_SOC
+	help
+	  Say Y if you want to add support for SoC audio on Marvell
+	  Dove Development Board.
+
+menu "Select Codecs for the mv88fx i2s"
+     depends on SND_DOVE_SOC_MRVL_AUDIO
+
+config CODEC_CS42L51
+        bool "CS42L51 codec"
+        depends on SND_DOVE_SOC_MRVL_AUDIO
+        select SND_SOC_CS42L51
+
+config CODEC_RT5623
+        bool "RT5623 codec"
+        depends on SND_DOVE_SOC_MRVL_AUDIO
+        select SND_SOC_RT5623
+
+config CODEC_RT5630
+        bool "RT5630 codec"
+        depends on SND_DOVE_SOC_MRVL_AUDIO
+        select SND_SOC_RT5630
+
+endmenu
+endmenu
+

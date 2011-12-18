@@ -68,7 +68,8 @@ static void input_polled_device_work(struct work_struct *work)
 	if (delay >= HZ)
 		delay = round_jiffies_relative(delay);
 
-	queue_delayed_work(polldev_wq, &dev->work, delay);
+	if (!dev->stop)
+		queue_delayed_work(polldev_wq, &dev->work, delay);
 }
 
 static int input_open_polled_device(struct input_dev *input)
@@ -95,6 +96,28 @@ static void input_close_polled_device(struct input_dev *input)
 
 	cancel_delayed_work_sync(&dev->work);
 	input_polldev_stop_workqueue();
+}
+
+void input_stop_polled_device(struct input_dev *input)
+{
+	struct input_polled_dev *dev = input_get_drvdata(input);
+
+	dev->stop = 1;
+}
+
+int input_resume_polled_device(struct input_dev *input)
+{
+	struct input_polled_dev *dev = input_get_drvdata(input);
+
+	dev->stop = 0;
+
+	if (dev->flush)
+		dev->flush(dev);
+
+	queue_delayed_work(polldev_wq, &dev->work,
+			   msecs_to_jiffies(dev->poll_interval));
+
+	return 0;
 }
 
 /**
@@ -157,7 +180,7 @@ int input_register_polled_device(struct input_polled_dev *dev)
 		dev->poll_interval = 500;
 	input->open = input_open_polled_device;
 	input->close = input_close_polled_device;
-
+	dev->stop = 0;
 	return input_register_device(input);
 }
 EXPORT_SYMBOL(input_register_polled_device);

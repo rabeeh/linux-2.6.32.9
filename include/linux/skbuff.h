@@ -30,6 +30,10 @@
 #include <linux/dmaengine.h>
 #include <linux/hrtimer.h>
 
+#if defined(CONFIG_MV_SKB_HEADROOM)
+# define NET_SKB_PAD  CONFIG_MV_SKB_HEADROOM
+#endif
+
 /* Don't change this without changing skb_csum_unnecessary! */
 #define CHECKSUM_NONE 0
 #define CHECKSUM_UNNECESSARY 1

@@ -2485,6 +2485,14 @@ int wake_up_state(struct task_struct *p, unsigned int state)
 	return try_to_wake_up(p, state, 0);
 }
 
+#ifdef CONFIG_GLOBAL_PREEMPT_NOTIFIERS
+/*
+ * global preempt notifiers
+ * all the task reschedules will be notified instead of only the current task
+ */
+struct hlist_head g_preempt_notifiers;
+#endif
+
 /*
  * Perform scheduler related setup for a newly forked process p.
  * p is forked by current.
@@ -2673,6 +2681,31 @@ void preempt_notifier_unregister(struct preempt_notifier *notifier)
 }
 EXPORT_SYMBOL_GPL(preempt_notifier_unregister);
 
+#ifdef CONFIG_GLOBAL_PREEMPT_NOTIFIERS
+/**
+ * global_preempt_notifier_register - tell me when any of tasks is being preempted & rescheduled
+ * @notifier: notifier struct to register
+ */
+void global_preempt_notifier_register(struct preempt_notifier *notifier)
+{
+	hlist_add_head(&notifier->link, &g_preempt_notifiers);
+}
+EXPORT_SYMBOL_GPL(global_preempt_notifier_register);
+
+/**
+ * global_preempt_notifier_unregister - no longer interested in preemption notifications of any tasks
+ * @notifier: notifier struct to unregister
+ *
+ * This is safe to call from within a preemption notifier.
+ */
+void global_preempt_notifier_unregister(struct preempt_notifier *notifier)
+{
+	hlist_del(&notifier->link);
+}
+EXPORT_SYMBOL_GPL(global_preempt_notifier_unregister);
+
+#endif
+
 static void fire_sched_in_preempt_notifiers(struct task_struct *curr)
 {
 	struct preempt_notifier *notifier;
@@ -2680,6 +2713,12 @@ static void fire_sched_in_preempt_notifiers(struct task_struct *curr)
 
 	hlist_for_each_entry(notifier, node, &curr->preempt_notifiers, link)
 		notifier->ops->sched_in(notifier, raw_smp_processor_id());
+
+#ifdef CONFIG_GLOBAL_PREEMPT_NOTIFIERS
+	/* notifiy the global preempt notifiers */
+	hlist_for_each_entry(notifier, node, &g_preempt_notifiers, link)
+		notifier->ops->sched_in(notifier, raw_smp_processor_id());
+#endif
 }
 
 static void
@@ -2691,6 +2730,12 @@ fire_sched_out_preempt_notifiers(struct task_struct *curr,
 
 	hlist_for_each_entry(notifier, node, &curr->preempt_notifiers, link)
 		notifier->ops->sched_out(notifier, next);
+
+#ifdef CONFIG_GLOBAL_PREEMPT_NOTIFIERS
+	/* notifiy the global preempt notifiers */
+	hlist_for_each_entry(notifier, node, &g_preempt_notifiers, link)
+		notifier->ops->sched_out(notifier, next);
+#endif
 }
 
 #else /* !CONFIG_PREEMPT_NOTIFIERS */
@@ -9557,6 +9602,11 @@ void __init sched_init(void)
 
 #ifdef CONFIG_PREEMPT_NOTIFIERS
 	INIT_HLIST_HEAD(&init_task.preempt_notifiers);
+
+#ifdef CONFIG_GLOBAL_PREEMPT_NOTIFIERS
+	INIT_HLIST_HEAD(&g_preempt_notifiers);
+#endif
+
 #endif
 
 #ifdef CONFIG_SMP
@@ -9613,13 +9663,23 @@ static inline int preempt_count_equals(int preempt_offset)
 	return (nested == PREEMPT_INATOMIC_BASE + preempt_offset);
 }
 
+static int __might_sleep_init_called;
+int __init __might_sleep_init(void)
+{
+	__might_sleep_init_called = 1;
+	return 0;
+}
+early_initcall(__might_sleep_init);
+
 void __might_sleep(char *file, int line, int preempt_offset)
 {
 #ifdef in_atomic
 	static unsigned long prev_jiffy;	/* ratelimiting */
 
-	if ((preempt_count_equals(preempt_offset) && !irqs_disabled()) ||
-	    system_state != SYSTEM_RUNNING || oops_in_progress)
+	if ((preempt_count_equals(preempt_offset) && !irqs_disabled()) || oops_in_progress)
+		return;
+	if (system_state != SYSTEM_RUNNING &&
+	    (!__might_sleep_init_called || system_state != SYSTEM_BOOTING))
 		return;
 	if (time_before(jiffies, prev_jiffy + HZ) && prev_jiffy)
 		return;
@@ -10439,6 +10499,15 @@ cpu_cgroup_destroy(struct cgroup_subsys *ss, struct cgroup *cgrp)
 static int
 cpu_cgroup_can_attach_task(struct cgroup *cgrp, struct task_struct *tsk)
 {
+	if ((current != tsk) && (!capable(CAP_SYS_NICE))) {
+		const struct cred *cred = current_cred(), *tcred;
+
+		tcred = __task_cred(tsk);
+
+		if (cred->euid != tcred->uid && cred->euid != tcred->suid)
+			return -EPERM;
+	}
+
 #ifdef CONFIG_RT_GROUP_SCHED
 	if (!sched_rt_can_attach(cgroup_tg(cgrp), tsk))
 		return -EINVAL;

@@ -52,6 +52,10 @@
 #include <linux/mtd/partitions.h>
 #endif
 
+#ifdef CONFIG_MV_MTD_GANG_SUPPORT
+static char nand_name[128];
+#endif
+
 /* Define default oob placement schemes for large and small page devices */
 static struct nand_ecclayout nand_oob_8 = {
 	.eccbytes = 3,
@@ -2518,10 +2522,21 @@ static struct nand_flash_dev *nand_get_flash_type(struct mtd_info *mtd,
 	if (!type)
 		return ERR_PTR(-ENODEV);
 
-	if (!mtd->name)
+	if (!mtd->name) {
+#ifdef CONFIG_MV_MTD_GANG_SUPPORT
+		sprintf(nand_name, "%s%s", type->name,
+				(chip->num_devs == 2) ? " - Ganged" : "");
+		type->name = nand_name;
+#endif
 		mtd->name = type->name;
+	}
 
 	chip->chipsize = (uint64_t)type->chipsize << 20;
+#ifdef CONFIG_MV_MTD_GANG_SUPPORT
+	chip->chipsize *= chip->num_devs;
+	if(chip->num_devs > 1)
+		type->options |= NAND_BUSWIDTH_16;
+#endif
 
 	/* Newer devices have all the information in additional id bytes */
 	if (!type->pagesize) {
@@ -2532,16 +2547,25 @@ static struct nand_flash_dev *nand_get_flash_type(struct mtd_info *mtd,
 		extid = chip->read_byte(mtd);
 		/* Calc pagesize */
 		mtd->writesize = 1024 << (extid & 0x3);
+#ifdef CONFIG_MV_MTD_GANG_SUPPORT
+		mtd->writesize *= chip->num_devs;
+#endif
 		extid >>= 2;
 		/* Calc oobsize */
 		mtd->oobsize = (8 << (extid & 0x01)) * (mtd->writesize >> 9);
 		extid >>= 2;
 		/* Calc blocksize. Blocksize is multiples of 64KiB */
 		mtd->erasesize = (64 * 1024) << (extid & 0x03);
+#ifdef CONFIG_MV_MTD_GANG_SUPPORT
+		mtd->erasesize *= chip->num_devs;
+#endif
 		extid >>= 2;
 		/* Get buswidth information */
 		busw = (extid & 0x01) ? NAND_BUSWIDTH_16 : 0;
-
+#ifdef CONFIG_MV_MTD_GANG_SUPPORT
+		if(chip->num_devs > 1)
+			busw = NAND_BUSWIDTH_16;
+#endif
 	} else {
 		/*
 		 * Old devices have chip data hardcoded in the device id table
@@ -2549,7 +2573,16 @@ static struct nand_flash_dev *nand_get_flash_type(struct mtd_info *mtd,
 		mtd->erasesize = type->erasesize;
 		mtd->writesize = type->pagesize;
 		mtd->oobsize = mtd->writesize / 32;
+#ifdef CONFIG_MV_MTD_MLC_NAND_SUPPORT
+		/* New devices have non standard OOB size */
+		if (chip->oobsize_ovrd)
+			mtd->oobsize = chip->oobsize_ovrd;
+#endif
 		busw = type->options & NAND_BUSWIDTH_16;
+#ifdef CONFIG_MV_MTD_GANG_SUPPORT
+		mtd->erasesize *= chip->num_devs;
+		mtd->writesize *= chip->num_devs;
+#endif
 	}
 
 	/* Try to identify manufacturer */

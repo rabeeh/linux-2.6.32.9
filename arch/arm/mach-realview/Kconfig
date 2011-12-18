@@ -46,6 +46,15 @@ config MACH_REALVIEW_PB1176
 	select ARM_GIC
 	help
 	  Include support for the ARM(R) RealView ARM1176 Platform Baseboard.
+config REALVIEW_DOVE_GPIO_IRQ
+	bool "Support RealView GPIO interrupt for Dove FlareonGV EB"
+	depends on MACH_REALVIEW_EB
+	select GENERIC_GPIO
+	default n
+	help
+	  Enable support for interrupt trigger on GPIO.
+	  Since the LCD, VMETA and GPU on the Dove FlareonGV EB use the GPIO
+	  on RealView platform as their interrupt source. 
 
 config REALVIEW_PB1176_SECURE_FLASH
 	bool "Allow access to the secure flash memory block"

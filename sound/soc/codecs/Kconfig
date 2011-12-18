@@ -111,6 +111,12 @@ config SND_SOC_CS4270_VD33_ERRATA
 config SND_SOC_CX20442
 	tristate
 
+# Cirrus Logic CS42L51 Codec
+config SND_SOC_CS42L51
+	tristate
+	depends on SND_SOC
+
+
 config SND_SOC_L3
        tristate
 
@@ -220,3 +226,24 @@ config SND_SOC_WM9713
 # Amp
 config SND_SOC_MAX9877
 	tristate
+
+# Realtek RT5623 Codec
+config SND_SOC_RT5623
+       tristate
+       depends on SND_SOC
+
+# Realtek RT5610 Codec
+config SND_SOC_RT5610
+        tristate
+        depends on SND_SOC
+
+# Realtek RT5630 Codec
+config SND_SOC_RT5630
+        tristate
+        depends on SND_SOC
+
+# Realtek RT655 Codec
+config SND_SOC_RT655
+        tristate
+        depends on SND_SOC
+

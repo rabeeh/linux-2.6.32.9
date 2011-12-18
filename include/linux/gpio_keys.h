@@ -15,6 +15,8 @@ struct gpio_keys_button {
 struct gpio_keys_platform_data {
 	struct gpio_keys_button *buttons;
 	int nbuttons;
+	int use_shared_irq;
+	int shared_irq;
 	unsigned int rep:1;		/* enable input subsystem auto repeat */
 };
 

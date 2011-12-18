@@ -12,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/mbus.h>
+#include <linux/clk.h>
 #include <plat/ehci-orion.h>
 
 #define rdl(off)	__raw_readl(hcd->regs + (off))
@@ -25,6 +26,7 @@
 #define USB_WINDOW_BASE(i)	(0x324 + ((i) << 4))
 #define USB_IPG			0x360
 #define USB_PHY_PWR_CTRL	0x400
+#define USB_PHY_PLL_CTRL	0x410
 #define USB_PHY_TX_CTRL		0x420
 #define USB_PHY_RX_CTRL		0x430
 #define USB_PHY_IVREF_CTRL	0x440
@@ -42,6 +44,7 @@ static void orion_usb_phy_v1_setup(struct usb_hcd *hcd)
 	wrl(USB_CAUSE, 0);
 	wrl(USB_MASK, 0);
 
+#if 0
 	/*
 	 * Reset controller
 	 */
@@ -98,6 +101,94 @@ static void orion_usb_phy_v1_setup(struct usb_hcd *hcd)
 	 * GL# USB-4 Setup USB Host mode
 	 */
 	wrl(USB_MODE, 0x13);
+#endif
+}
+
+static void orion_usb_phy_v2_setup(struct usb_hcd *hcd)
+{
+	u32 reg;
+
+	/* The below GLs are according to the Orion Errata document */
+	/*
+	 * Clear interrupt cause and mask
+	 */
+	wrl(USB_CAUSE, 0);
+	wrl(USB_MASK, 0);
+
+	/*
+	 * Reset controller
+	 */
+	wrl(USB_CMD, rdl(USB_CMD) | 0x2);
+	while (rdl(USB_CMD) & 0x2);
+
+
+	/* Clear bits 30 and 31.
+         */
+	reg = rdl(USB_IPG);
+	reg &= ~(0x3 << 30);
+	/* Change bits[14:8] - IPG for non Start of Frame Packets
+	 * from 0x9(default) to 0xD
+	 */
+	reg &= ~(0x7f << 8);
+	reg |= 0xd << 8;
+	wrl(USB_IPG, reg);
+
+	/* VCO recalibrate */
+	wrl(USB_PHY_PLL_CTRL, rdl(USB_PHY_PLL_CTRL) | (1 << 21));
+	udelay(100);
+	wrl(USB_PHY_PLL_CTRL, rdl(USB_PHY_PLL_CTRL) & ~(1 << 21));
+	
+	reg = rdl(USB_PHY_TX_CTRL);
+	reg |= 1 << 11; /* LOWVDD_EN */
+	reg |= 1 << 12; /* REG_RCAL_START */
+	/* bits[16:14]     (IMPCAL_VTH[2:0] = 101) */
+	reg &= ~(0x7 << 14);
+	reg |= (0x5 << 14);
+	reg &= ~(1 << 21); /* TX_BLOCK_EN */
+	reg &= ~(1 << 31); /* HS_STRESS_CTRL */
+	wrl(USB_PHY_TX_CTRL, reg);
+	udelay(100);
+	reg = rdl(USB_PHY_TX_CTRL);
+	reg &= ~(1 << 12); /* REG_RCAL_START */
+	wrl(USB_PHY_TX_CTRL, reg);
+
+	reg = rdl(USB_PHY_RX_CTRL);
+	reg &= ~(3 << 2); /* LPL_COEF */
+	reg |= 1 << 2;
+
+	reg &= ~(0xf << 4);
+	reg |= 0xc << 4; /* SQ_THRESH */ 
+	reg &= ~(3 << 15); /* REG_SQ_LENGTH */
+	reg |= 1 << 15;
+	reg &= ~(1 << 21); /* CDR_FASTLOCK_EN */
+	reg &= ~(3 << 26); /* EDGE_DET */
+	wrl(USB_PHY_RX_CTRL, reg);
+
+
+	/*
+	 * USB PHY IVREF Control
+	 * TXVDD12[9:8]=0x3
+	 */
+	wrl(USB_PHY_IVREF_CTRL, rdl(USB_PHY_IVREF_CTRL) | (0x3 << 8));
+
+
+	/*
+	 * GL# USB-3 GL# USB-9: USB PHY Test Group Control
+	 * REG_FIFO_SQ_RST[15]=0
+	 */
+	wrl(USB_PHY_TST_GRP_CTRL, rdl(USB_PHY_TST_GRP_CTRL) & ~0x8000);
+
+	/*
+	 * Stop and reset controller
+	 */
+	wrl(USB_CMD, rdl(USB_CMD) & ~0x1);
+	wrl(USB_CMD, rdl(USB_CMD) | 0x2);
+	while (rdl(USB_CMD) & 0x2);
+
+	/*
+	 * GL# USB-4 Setup USB Host mode
+	 */
+	wrl(USB_MODE, 0x3);
 }
 
 static int ehci_orion_setup(struct usb_hcd *hcd)
@@ -190,6 +281,35 @@ ehci_orion_conf_mbus_windows(struct usb_hcd *hcd,
 	}
 }
 
+static void __devinit
+ehci_orion_hw_init(struct usb_hcd *hcd,  struct orion_ehci_data *pd)
+{
+	/*
+	 * (Re-)program MBUS remapping windows if we are asked to.
+	 */
+	if (pd != NULL && pd->dram != NULL)
+		ehci_orion_conf_mbus_windows(hcd, pd->dram);
+
+
+	/*
+	 * setup Orion USB controller.
+	 */
+	switch (pd->phy_version) {
+	case EHCI_PHY_NA:	/* dont change USB phy settings */
+		break;
+	case EHCI_PHY_ORION:
+		orion_usb_phy_v1_setup(hcd);
+		break;
+	case EHCI_PHY_DOVE:
+		orion_usb_phy_v2_setup(hcd);
+		break;
+	case EHCI_PHY_DD:
+	case EHCI_PHY_KW:
+	default:
+		printk(KERN_WARNING "Orion ehci -USB phy version isn't supported.\n");
+	}
+
+}
 static int __devinit ehci_orion_drv_probe(struct platform_device *pdev)
 {
 	struct orion_ehci_data *pd = pdev->dev.platform_data;
@@ -243,6 +363,14 @@ static int __devinit ehci_orion_drv_probe(struct platform_device *pdev)
 		goto err3;
 	}
 
+#if defined(CONFIG_HAVE_CLK)
+	hcd->clk = clk_get(&pdev->dev, NULL);
+	if (IS_ERR(hcd->clk))
+		dev_notice(&pdev->dev, "cannot get clkdev\n");
+	else
+		clk_enable(hcd->clk);
+#endif
+
 	hcd->rsrc_start = res->start;
 	hcd->rsrc_len = res->end - res->start + 1;
 	hcd->regs = regs;
@@ -255,26 +383,7 @@ static int __devinit ehci_orion_drv_probe(struct platform_device *pdev)
 	hcd->has_tt = 1;
 	ehci->sbrn = 0x20;
 
-	/*
-	 * (Re-)program MBUS remapping windows if we are asked to.
-	 */
-	if (pd != NULL && pd->dram != NULL)
-		ehci_orion_conf_mbus_windows(hcd, pd->dram);
-
-	/*
-	 * setup Orion USB controller.
-	 */
-	switch (pd->phy_version) {
-	case EHCI_PHY_NA:	/* dont change USB phy settings */
-		break;
-	case EHCI_PHY_ORION:
-		orion_usb_phy_v1_setup(hcd);
-		break;
-	case EHCI_PHY_DD:
-	case EHCI_PHY_KW:
-	default:
-		printk(KERN_WARNING "Orion ehci -USB phy version isn't supported.\n");
-	}
+	ehci_orion_hw_init(hcd, pd);
 
 	err = usb_add_hcd(hcd, irq, IRQF_SHARED | IRQF_DISABLED);
 	if (err)
@@ -283,6 +392,13 @@ static int __devinit ehci_orion_drv_probe(struct platform_device *pdev)
 	return 0;
 
 err4:
+#if defined(CONFIG_HAVE_CLK)
+	if (!IS_ERR(hcd->clk)) {
+		clk_disable(hcd->clk);
+		clk_put(hcd->clk);
+	}
+#endif
+
 	usb_put_hcd(hcd);
 err3:
 	iounmap(regs);
@@ -303,15 +419,114 @@ static int __exit ehci_orion_drv_remove(struct platform_device *pdev)
 	iounmap(hcd->regs);
 	release_mem_region(hcd->rsrc_start, hcd->rsrc_len);
 	usb_put_hcd(hcd);
+#if defined(CONFIG_HAVE_CLK)
+	if (!IS_ERR(hcd->clk)) {
+		clk_disable(hcd->clk);
+		clk_put(hcd->clk);
+	}
+#endif
 
 	return 0;
 }
+
+#ifdef CONFIG_PM
+static int ehci_orion_suspend(struct platform_device *pdev,
+			      pm_message_t state)
+{
+	struct usb_hcd *hcd = platform_get_drvdata(pdev);
+	struct ehci_hcd		*ehci = hcd_to_ehci(hcd);
+	unsigned long		flags;
+	int			rc = 0;
+
+	if (time_before(jiffies, ehci->next_statechange))
+		msleep(10);
+
+	/* Root hub was already suspended. Disable irq emission and
+	 * mark HW unaccessible, bail out if RH has been resumed. Use
+	 * the spinlock to properly synchronize with possible pending
+	 * RH suspend or resume activity.
+	 *
+	 * This is still racy as hcd->state is manipulated outside of
+	 * any locks =P But that will be a different fix.
+	 */
+	spin_lock_irqsave (&ehci->lock, flags);
+	if (hcd->state != HC_STATE_SUSPENDED) {
+		rc = -EINVAL;
+		goto bail;
+	}
+	ehci_writel(ehci, 0, &ehci->regs->intr_enable);
+	(void)ehci_readl(ehci, &ehci->regs->intr_enable);
+
+	/* make sure snapshot being resumed re-enumerates everything */
+	if (state.event == PM_EVENT_PRETHAW) {
+		ehci_halt(ehci);
+		ehci_reset(ehci);
+	}
+
+	clear_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags);
+ bail:
+	spin_unlock_irqrestore (&ehci->lock, flags);
+
+	// could save FLADJ in case of Vaux power loss
+	// ... we'd only use it to handle clock skew
+
+	return rc;
+}
+static int ehci_orion_resume(struct platform_device *pdev)
+{
+	struct orion_ehci_data *pd = pdev->dev.platform_data;
+	struct usb_hcd *hcd = platform_get_drvdata(pdev);
+	struct ehci_hcd		*ehci = hcd_to_ehci(hcd);
+	
+	// maybe restore FLADJ
+
+	if (time_before(jiffies, ehci->next_statechange))
+		msleep(100);
+
+	/* Mark hardware accessible again as we are out of D3 state by now */
+	set_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags);
+
+	ehci_dbg(ehci, "lost power, restarting\n");
+	usb_root_hub_lost_power(hcd->self.root_hub);
+
+	/* Else reset, to cope with power loss or flush-to-storage
+	 * style "resume" having let BIOS kick in during reboot.
+	 */
+	(void) ehci_halt(ehci);
+	(void) ehci_reset(ehci);
+	ehci_orion_hw_init(hcd, pd);
+
+	/* emptying the schedule aborts any urbs */
+	spin_lock_irq(&ehci->lock);
+	if (ehci->reclaim)
+		end_unlink_async(ehci);
+	ehci_work(ehci);
+	spin_unlock_irq(&ehci->lock);
+
+	ehci_writel(ehci, ehci->command, &ehci->regs->command);
+	ehci_writel(ehci, FLAG_CF, &ehci->regs->configured_flag);
+	ehci_readl(ehci, &ehci->regs->command);	/* unblock posted writes */
+
+	/* here we "know" root ports should always stay powered */
+	ehci_port_power(ehci, 1);
+
+	hcd->state = HC_STATE_SUSPENDED;
+	return 0;
+
+}
+
+#else
+#define ehci_orion_suspend	NULL
+#define ehci_orion_resume	NULL
+#endif
 
 MODULE_ALIAS("platform:orion-ehci");
 
 static struct platform_driver ehci_orion_driver = {
 	.probe		= ehci_orion_drv_probe,
 	.remove		= __exit_p(ehci_orion_drv_remove),
+	.suspend	= ehci_orion_suspend,
+	.resume		= ehci_orion_resume,
 	.shutdown	= usb_hcd_platform_shutdown,
 	.driver.name	= "orion-ehci",
 };

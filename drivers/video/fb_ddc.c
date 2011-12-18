@@ -40,9 +40,28 @@ static unsigned char *fb_do_probe_ddc_edid(struct i2c_adapter *adapter)
 			 "block.\n");
 		return NULL;
 	}
-
-	if (i2c_transfer(adapter, msgs, 2) == 2)
+	if (adapter->algo->master_xfer) {
+		if (i2c_transfer(adapter, msgs, 2) == 2)
+			return buf;
+	} else {
+		int i;
+		dev_info(&adapter->dev, "use SMBUS adapter for reading EDID\n");
+		if (0 != i2c_smbus_xfer(adapter, msgs[0].addr, msgs[0].flags,
+					I2C_SMBUS_READ, 0, I2C_SMBUS_BYTE_DATA, buf)) {
+                        printk("%s: failed for address 0\n", __func__);
+			return NULL;
+                }
+		for (i=0; i < EDID_LENGTH; i++) {
+			if (0 != i2c_smbus_xfer(adapter, msgs[1].addr, 0,
+						I2C_SMBUS_READ, i, I2C_SMBUS_BYTE_DATA, 
+						buf + i)) {
+				printk("%s: failed for address %d\n", __func__, i);
+				return NULL;
+			}
+			
+		}
 		return buf;
+	}
 
 	dev_warn(&adapter->dev, "unable to read EDID block.\n");
 	kfree(buf);
@@ -55,6 +74,15 @@ unsigned char *fb_ddc_read(struct i2c_adapter *adapter)
 	unsigned char *edid = NULL;
 	int i, j;
 
+	if (!algo_data)	{
+		/* No direct control on I2C bus */
+		for (i = 0; i < 3; i++) {
+			edid = fb_do_probe_ddc_edid(adapter);
+			if (edid)
+				break;
+		}
+		return edid;
+	}
 	algo_data->setscl(algo_data->data, 1);
 
 	for (i = 0; i < 3; i++) {

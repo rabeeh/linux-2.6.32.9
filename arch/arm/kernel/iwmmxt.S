@@ -58,11 +58,19 @@
 
 ENTRY(iwmmxt_task_enable)
 
+#if defined(CONFIG_CPU_PJ4)
+    mrc     p15, 0, r2, c1, c0, 2
+    tst     r2, #0xf                        @ CP0 and CP1 accessible?
+    movne   pc, lr                          @ if so no business here
+    orr     r2, r2, #0xf                    @ enable access to CP0 and CP1
+    mcr     p15, 0, r2, c1, c0, 2
+#else
 	mrc	p15, 0, r2, c15, c1, 0
 	tst	r2, #0x3			@ CP0 and CP1 accessible?
 	movne	pc, lr				@ if so no business here
 	orr	r2, r2, #0x3			@ enable access to CP0 and CP1
 	mcr	p15, 0, r2, c15, c1, 0
+#endif
 
 	ldr	r3, =concan_owner
 	add	r0, r10, #TI_IWMMXT_STATE	@ get task Concan save area
@@ -179,17 +187,28 @@ ENTRY(iwmmxt_task_disable)
 	teqne	r1, r2				@ or specified one?
 	bne	1f				@ no: quit
 
+#if defined(CONFIG_CPU_PJ4)
+	mrc	p15, 0, r4, c1, c0, 2
+	orr	r4, r4, #0xf			@ enable access to CP0 and CP1
+	mcr	p15, 0, r4, c1, c0, 2
+#else
 	mrc	p15, 0, r4, c15, c1, 0
 	orr	r4, r4, #0x3			@ enable access to CP0 and CP1
 	mcr	p15, 0, r4, c15, c1, 0
+#endif
 	mov	r0, #0				@ nothing to load
 	str	r0, [r3]			@ no more current owner
 	mrc	p15, 0, r2, c2, c0, 0
 	mov	r2, r2				@ cpwait
 	bl	concan_save
 
+#if defined(CONFIG_CPU_PJ4)
+	bic	r4, r4, #0xf			@ disable access to CP0 and CP1
+	mcr	p15, 0, r4, c1, c0, 2
+#else
 	bic	r4, r4, #0x3			@ disable access to CP0 and CP1
 	mcr	p15, 0, r4, c15, c1, 0
+#endif
 	mrc	p15, 0, r2, c2, c0, 0
 	mov	r2, r2				@ cpwait
 
@@ -277,8 +296,13 @@ ENTRY(iwmmxt_task_restore)
  */
 ENTRY(iwmmxt_task_switch)
 
+#if defined(CONFIG_CPU_PJ4)
+	mrc	p15, 0, r1, c1, c0, 2
+	tst	r1, #0xf			@ CP0 and CP1 accessible?
+#else
 	mrc	p15, 0, r1, c15, c1, 0
 	tst	r1, #0x3			@ CP0 and CP1 accessible?
+#endif
 	bne	1f				@ yes: block them for next task
 
 	ldr	r2, =concan_owner
@@ -287,8 +311,13 @@ ENTRY(iwmmxt_task_switch)
 	teq	r2, r3				@ next task owns it?
 	movne	pc, lr				@ no: leave Concan disabled
 
+#if defined(CONFIG_CPU_PJ4)
+1:	eor	r1, r1, #0xf			@ flip Concan access
+	mcr	p15, 0, r1, c1, c0, 2
+#else
 1:	eor	r1, r1, #3			@ flip Concan access
 	mcr	p15, 0, r1, c15, c1, 0
+#endif
 
 	mrc	p15, 0, r1, c2, c0, 0
 	sub	pc, lr, r1, lsr #32		@ cpwait and return

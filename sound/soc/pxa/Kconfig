@@ -18,6 +18,10 @@ config SND_PXA2XX_SOC_AC97
 	select SND_PXA2XX_LIB_AC97
 	select SND_SOC_AC97_BUS
 
+config SND_PXA2XX_SOC_AC97_SURROUND
+	tristate
+	select SND_PXA2XX_SOC_AC97
+
 config SND_PXA2XX_SOC_I2S
 	tristate
 

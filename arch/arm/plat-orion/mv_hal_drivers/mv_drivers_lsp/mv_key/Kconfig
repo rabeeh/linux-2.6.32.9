@@ -1,0 +1,31 @@
+menu "Marvell Key driver"
+
+config MV_GPIO_KEY
+	tristate "Marvell GPIO Key driver"
+	---help---
+	  This selects the Marvell GPIO Key driver
+	  say Y or M here.
+	  If unsure, say N.
+
+config MV_TOUCH_KEY
+	tristate "Marvell Touch Key driver"
+	---help---
+	  This selects the Marvell Touch Key driver
+	  say Y or M here.
+	  If unsure, say N.
+
+config MV_TOUCH_SLIDER
+	tristate "Marvell Touch Slider driver"
+	---help---
+	  This selects the Marvell Touch Slider driver
+	  say Y or M here.
+	  If unsure, say N.
+
+config MV_EC_KEY
+	tristate "Marvell EC Key driver"
+	---help---
+	  This selects the Marvell EC Key driver
+	  say Y or M here.
+	  If unsure, say N.
+
+endmenu

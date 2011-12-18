@@ -350,12 +350,60 @@ static int pca953x_remove(struct i2c_client *client)
 	return 0;
 }
 
+#ifdef CONFIG_PM
+static int pca953x_suspend(struct i2c_client *client, pm_message_t state)
+{
+	struct pca953x_platform_data *pdata = client->dev.platform_data;
+	struct pca953x_chip *chip = i2c_get_clientdata(client);
+	int ret;
+
+	ret = pca953x_read_reg(chip, PCA953X_OUTPUT, &chip->reg_output);
+	if (ret)
+		return ret;
+
+	ret = pca953x_read_reg(chip, PCA953X_DIRECTION, &chip->reg_direction);
+
+	return ret;
+}
+
+static int pca953x_resume(struct i2c_client *client)
+{
+	struct pca953x_platform_data *pdata = client->dev.platform_data;
+	struct pca953x_chip *chip = i2c_get_clientdata(client);
+	uint16_t reg_val;
+	int ret = 0;
+
+	/* set platform specific polarity inversion */
+	ret = pca953x_write_reg(chip, PCA953X_INVERT, pdata->invert);
+	if (ret)
+		return ret;
+
+	ret = pca953x_write_reg(chip, PCA953X_OUTPUT, chip->reg_output);
+	if (ret)
+		return ret;
+
+	ret = pca953x_write_reg(chip, PCA953X_DIRECTION, chip->reg_direction);
+
+	if (ret)
+		return ret;
+
+	ret = pca953x_read_reg(chip, PCA953X_INPUT, &reg_val);
+	return ret;
+}
+
+#else
+#define pca953x_suspend	NULL
+#define pca953x_resume	NULL
+#endif
+
 static struct i2c_driver pca953x_driver = {
 	.driver = {
 		.name	= "pca953x",
 	},
 	.probe		= pca953x_probe,
 	.remove		= pca953x_remove,
+	.suspend	= pca953x_suspend,
+	.resume		= pca953x_resume,
 	.id_table	= pca953x_id,
 };
 

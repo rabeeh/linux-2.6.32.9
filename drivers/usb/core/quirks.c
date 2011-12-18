@@ -96,6 +96,11 @@ void usb_detect_quirks(struct usb_device *udev)
 {
 	const struct usb_device_id *id = usb_quirk_list;
 
+#if defined(CONFIG_ARCH_FEROCEON) || defined(CONFIG_MARVELL) || defined(CONFIG_PLAT_ORION)
+	/* By default set USB_QUIRK_STRING_FETCH_255 for all unknown devices */
+	udev->quirks = USB_QUIRK_STRING_FETCH_255;
+#endif /* CONFIG_ARCH_FEROCEON || CONFIG_ARCH_FEROCEON */
+
 	id = find_id(udev);
 	if (id)
 		udev->quirks = (u32)(id->driver_info);

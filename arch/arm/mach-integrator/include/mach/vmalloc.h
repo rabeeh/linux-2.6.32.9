@@ -1,5 +1,5 @@
 /*
- *  arch/arm/mach-integrator/include/mach/vmalloc.h
+ *  linux/include/asm-arm/arch-integrator/vmalloc.h
  *
  *  Copyright (C) 2000 Russell King.
  *
@@ -17,4 +17,4 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
-#define VMALLOC_END       (PAGE_OFFSET + 0x10000000)
+#define VMALLOC_END       (PAGE_OFFSET + 0x28000000)

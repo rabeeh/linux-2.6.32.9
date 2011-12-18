@@ -56,6 +56,13 @@ struct gpio_mouse_platform_data {
 		};
 		int pins[GPIO_MOUSE_PIN_MAX];
 	};
+	int use_activity_irq; /* if we have irq that raised when a gpio becomes
+			       * active or non active
+			       */
+	int activity_gpio; /* gpio that triggers interrupt when any gpio is 
+			    * active 
+			    */
+
 };
 
 #endif /* _GPIO_MOUSE_H */

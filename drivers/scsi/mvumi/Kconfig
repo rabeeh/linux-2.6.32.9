@@ -1,0 +1,8 @@
+config MVUMI_SAS
+        tristate "Marvell SAS RAID Module"
+        depends on PCI && SCSI
+        help
+        Module for Marvell RAID based on SAS controllers.
+        To compile this driver as a module, choose 'm' here.
+        Module will be called mvraid_sas
+

@@ -47,9 +47,9 @@ MODULE_PARM_DESC(debug, "Debug level (0-1)");
 #define OV7670_FRAME_RATE 30
 
 /*
- * The 7670 sits on i2c with ID 0x42
+ * The 7670 sits on i2c with ID 0x21
  */
-#define OV7670_I2C_ADDR 0x42
+#define OV7670_I2C_ADDR 0x21
 
 /* Registers */
 #define REG_GAIN	0x00	/* Gain lower 8 bits (rest in vref) */
@@ -195,7 +195,7 @@ struct ov7670_format_struct;  /* coming later */
 struct ov7670_info {
 	struct v4l2_subdev sd;
 	struct ov7670_format_struct *fmt;  /* Current format */
-	unsigned char sat;		/* Saturation value */
+	int sat;		/* Saturation value */
 	int hue;			/* Hue value */
 };
 
@@ -259,14 +259,33 @@ static struct regval_list ov7670_default_regs[] = {
 	{ REG_GAIN, 0 },	{ REG_AECH, 0 },
 	{ REG_COM4, 0x40 }, /* magic reserved bit */
 	{ REG_COM9, 0x18 }, /* 4x gain + magic rsvd bit */
+#if 0
 	{ REG_BD50MAX, 0x05 },	{ REG_BD60MAX, 0x07 },
+#else
+	{ REG_BD50MAX, 0x02 },	{ REG_BD60MAX, 0x03 },
+#endif
+#if 0
 	{ REG_AEW, 0x95 },	{ REG_AEB, 0x33 },
 	{ REG_VPT, 0xe3 },	{ REG_HAECC1, 0x78 },
+#else
+	{ REG_AEW, 0x48 },	{ REG_AEB, 0x38 },
+	{ REG_VPT, 0x82 },	{ REG_HAECC1, 0x78 },
+#endif
 	{ REG_HAECC2, 0x68 },	{ 0xa1, 0x03 }, /* magic */
 	{ REG_HAECC3, 0xd8 },	{ REG_HAECC4, 0xd8 },
 	{ REG_HAECC5, 0xf0 },	{ REG_HAECC6, 0x90 },
+#if 0
 	{ REG_HAECC7, 0x94 },
+#else
+	{ REG_HAECC7, 0x14 },
+#endif
 	{ REG_COM8, COM8_FASTAEC|COM8_AECSTEP|COM8_BFILT|COM8_AGC|COM8_AEC },
+
+	/* Enable lens correction */
+	{ 0x62, 0x20 },		{ 0x63, 0x10 },
+	{ 0x64, 0x0d },		{ 0x65, 0x00 },
+	{ 0x66, 0x05 },		{ 0x94, 0x0a },
+	{ 0x95, 0x12 },
 
 	/* Almost all of these are magic "reserved" values.  */
 	{ REG_COM5, 0x61 },	{ REG_COM6, 0x4b },
@@ -311,12 +330,22 @@ static struct regval_list ov7670_default_regs[] = {
 	{ 0xc9, 0x60 },		{ REG_COM16, 0x38 },
 	{ 0x56, 0x40 },
 
+#if 0
 	{ 0x34, 0x11 },		{ REG_COM11, COM11_EXP|COM11_HZAUTO },
+#else
+	/* Enable night mode 60Hz, anti-flicker */
+	{ 0x34, 0x11 },		{ REG_COM11, 0xe2 },
+#endif
 	{ 0xa4, 0x88 },		{ 0x96, 0 },
 	{ 0x97, 0x30 },		{ 0x98, 0x20 },
 	{ 0x99, 0x30 },		{ 0x9a, 0x84 },
 	{ 0x9b, 0x29 },		{ 0x9c, 0x03 },
+#if 0
 	{ 0x9d, 0x4c },		{ 0x9e, 0x3f },
+#else
+	/* Anti-flicker */
+	{ 0x9d, 0x99 },		{ 0x9e, 0x7f },
+#endif
 	{ 0x78, 0x04 },
 
 	/* Extra-weird stuff.  Some sort of multiplexor register */
@@ -474,10 +503,8 @@ static int ov7670_detect(struct v4l2_subdev *sd)
 	unsigned char v;
 	int ret;
 
-	ret = ov7670_init(sd, 0);
-	if (ret < 0)
-		return ret;
 	ret = ov7670_read(sd, REG_MIDH, &v);
+
 	if (ret < 0)
 		return ret;
 	if (v != 0x7f) /* OV manuf. id. */
@@ -500,7 +527,9 @@ static int ov7670_detect(struct v4l2_subdev *sd)
 		return ret;
 	if (v != 0x73)  /* PID + VER = 0x76 / 0x73 */
 		return -ENODEV;
-	return 0;
+
+	ret = ov7670_init(sd, 0);
+	return ret;
 }
 
 
@@ -615,9 +644,9 @@ static struct ov7670_win_size {
 		.width		= QVGA_WIDTH,
 		.height		= QVGA_HEIGHT,
 		.com7_bit	= COM7_FMT_QVGA,
-		.hstart		= 164,		/* Empirically determined */
-		.hstop		=  20,
-		.vstart		=  14,
+		.hstart		= 172,		/* Empirically determined */
+		.hstop		=  32,
+		.vstart		=  13,
 		.vstop		= 494,
 		.regs 		= NULL,
 	},
@@ -1013,6 +1042,8 @@ static unsigned char ov7670_sm_to_abs(unsigned char v)
 {
 	if ((v & 0x80) == 0)
 		return v + 128;
+	if (v == 0x80)
+		return 0;
 	return 128 - (v & 0x7f);
 }
 
@@ -1029,9 +1060,11 @@ static int ov7670_s_brightness(struct v4l2_subdev *sd, int value)
 	unsigned char com8 = 0, v;
 	int ret;
 
+#if 0
 	ov7670_read(sd, REG_COM8, &com8);
 	com8 &= ~COM8_AEC;
 	ov7670_write(sd, REG_COM8, com8);
+#endif
 	v = ov7670_abs_to_sm(value);
 	ret = ov7670_write(sd, REG_BRIGHT, v);
 	return ret;

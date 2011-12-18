@@ -71,6 +71,9 @@
 #define CAR		__REG(0x40500020)  /* CODEC Access Register */
 #define CAR_CAIP	(1 << 0)	/* Codec Access In Progress */
 
+#define PCSDR		__REG(0x4050002C)    /* PCM Surround Data Register */
+#define PCCLDR		__REG(0x40500038)    /* PCM Center / LFE Data Register */
+
 #define PCDR		__REG(0x40500040)  /* PCM FIFO Data Register */
 #define MCDR		__REG(0x40500060)  /* Mic-in FIFO Data Register */
 

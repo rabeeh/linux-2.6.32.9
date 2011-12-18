@@ -12,6 +12,10 @@
 struct orion_spi_info {
 	u32	tclk;		/* no <linux/clk.h> support yet */
 	u32	enable_clock_fix;
+	int	use_interrupt; /* use interrupt instead polling */
+	int	optional_div; /* if the controller have optional division
+			       * after the pre-scaler 
+			       */
 };
 
 

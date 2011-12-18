@@ -44,7 +44,7 @@ extern void nand_wait_ready(struct mtd_info *mtd);
  * adjust this accordingly.
  */
 #define NAND_MAX_OOBSIZE	128
-#define NAND_MAX_PAGESIZE	4096
+#define NAND_MAX_PAGESIZE	8192
 
 /*
  * Constants for hardware specific CLE/ALE/NCE function
@@ -389,7 +389,14 @@ struct nand_chip {
 
 	int		chip_delay;
 	unsigned int	options;
-
+#ifdef CONFIG_MV_MTD_GANG_SUPPORT
+	unsigned int	num_devs;
+#endif
+#ifdef CONFIG_MV_MTD_MLC_NAND_SUPPORT
+	unsigned int	oobsize_ovrd;
+	unsigned int	bb_location;
+	unsigned int	bb_page;
+#endif
 	int		page_shift;
 	int		phys_erase_shift;
 	int		bbt_erase_shift;
@@ -535,6 +542,11 @@ struct nand_bbt_descr {
 #define NAND_BBT_SAVECONTENT	0x00002000
 /* Search good / bad pattern on the first and the second page */
 #define NAND_BBT_SCAN2NDPAGE	0x00004000
+
+#ifdef CONFIG_MV_MTD_MLC_NAND_SUPPORT
+/* Search the bad block indicators according to Marvell's Naked symantics */
+#define NAND_BBT_SCANMVCUSTOM	0x10000000
+#endif
 
 /* The maximum number of blocks to scan for a bbt */
 #define NAND_BBT_SCAN_MAXBLOCKS	4

@@ -323,12 +323,18 @@ static int gpio_irq_set_type(u32 irq, u32 type)
 	return 0;
 }
 
+int	gpio_irq_set_wake(unsigned int irq, unsigned int on)
+{
+	return 0;
+}
+
 struct irq_chip orion_gpio_irq_chip = {
 	.name		= "orion_gpio_irq",
 	.ack		= gpio_irq_ack,
 	.mask		= gpio_irq_mask,
 	.unmask		= gpio_irq_unmask,
 	.set_type	= gpio_irq_set_type,
+	.set_wake	= gpio_irq_set_wake,
 };
 
 void orion_gpio_irq_handler(int pinoff)

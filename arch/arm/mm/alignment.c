@@ -533,6 +533,64 @@ bad:
 	return TYPE_ERROR;
 }
 
+#ifdef CONFIG_MRVL_ERRATA_THUMB_VLDR
+#define vmov_single(reg, val) \
+	__asm__(					\
+	"	.fpu	vfp\n"				\
+	"	vmov	s"#reg", %0\n"			\
+	: : "r" (val))
+
+#define case_reg(reg, val) \
+	case ((reg)):					\
+		vmov_single(reg, (val));		\
+		break
+
+static int
+do_alignment_thumb_vldr(unsigned long addr, unsigned long instr, struct pt_regs *regs)
+{
+	unsigned int double_op = (instr >> 8) & 1;
+	unsigned int vd = (instr >> 12) & 15;
+	unsigned int d = (instr >> 22) & 1;
+	unsigned int reg, val;
+	unsigned int fault;
+	int i;
+
+	/* Align the address to word */
+	addr &= ~3;
+
+	if (double_op) {
+		reg = (d << 4) | vd;
+		reg = reg << 1;
+	} else
+		reg = (vd << 1) | d;
+
+	for (i = 0; i <= double_op; i++) {
+		fault = __get_user(val, (u32 *)addr);
+		if (fault)
+			goto fault;
+		switch (reg) {
+			case_reg(0, val); case_reg(1, val); case_reg(2, val); case_reg(3, val);
+			case_reg(4, val); case_reg(5, val); case_reg(6, val); case_reg(7, val);
+			case_reg(8, val); case_reg(9, val); case_reg(10, val); case_reg(11, val);
+			case_reg(12, val); case_reg(13, val); case_reg(14, val); case_reg(15, val);
+			case_reg(16, val); case_reg(17, val); case_reg(18, val); case_reg(19, val);
+			case_reg(20, val); case_reg(21, val); case_reg(22, val); case_reg(23, val);
+			case_reg(24, val); case_reg(25, val); case_reg(26, val); case_reg(27, val);
+			case_reg(28, val); case_reg(29, val); case_reg(30, val); case_reg(31, val);
+		}
+		addr += 4;
+		reg += 1;
+	}
+
+	return TYPE_DONE;
+
+ fault:
+	return TYPE_FAULT;
+}
+#undef vmov_single
+#undef case_reg
+#endif /* CONFIG_MRVL_ERRATA_THUMB_VLDR */
+
 /*
  * Convert Thumb ld/st instruction forms to equivalent ARM instructions so
  * we can reuse ARM userland alignment fault fixups for Thumb.
@@ -745,6 +803,24 @@ do_alignment(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 	} else
 		fault = __get_user(instr, (u32 *)instrptr);
 	set_fs(fs);
+
+#ifdef CONFIG_MRVL_ERRATA_THUMB_VLDR
+	{
+		int id;
+		asm volatile("mrc p15, 0, %0, c0, c0, 0":"=r" (id));
+		if ((id & 0xf) >= 5) //This errata is not needed for revision >= 5
+			goto errata_end;
+	}
+
+	if (!fault && thumb_mode(regs) && ((instr & 0xff3f0e00) == 0xed1f0a00)) {
+		fault = do_alignment_thumb_vldr(addr, instr, regs);
+		if (fault == TYPE_DONE) {
+			regs->ARM_pc += isize;
+			return 0;
+		}
+	}
+errata_end:
+#endif
 
 	if (fault) {
 		type = TYPE_FAULT;

@@ -21,6 +21,23 @@ config VIDEO_OUTPUT_CONTROL
 	  This framework adds support for low-level control of the video 
 	  output switch.
 
+
+config DOVE_GPU
+       bool "Enable DOVE GPU support"
+       depends on ARCH_DOVE
+       default y
+       help
+         This framework adds support for dove gpu.
+
+config DOVE_GPU_MEM_SIZE
+       int "DOVE GPU memory size (MB)"
+       depends on DOVE_GPU
+       default 128
+       help
+         Set the memory size to be reserved for GPU usage. The value should be
+	 between 64 and 128.
+
+
 menuconfig FB
 	tristate "Support for frame buffer devices"
 	---help---
@@ -2160,6 +2177,7 @@ config FB_BROADSHEET
 	  and could also have been called by other names when coupled with
 	  a bridge adapter.
 
+source "drivers/video/marvell/Kconfig"
 source "drivers/video/omap/Kconfig"
 
 source "drivers/video/backlight/Kconfig"

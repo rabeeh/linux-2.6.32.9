@@ -14,6 +14,7 @@
 #include <linux/irq.h>
 #include <linux/mtd/partitions.h>
 #include <linux/ata_platform.h>
+#include <linux/i2c.h>
 #include <linux/mv643xx_eth.h>
 #include <linux/ethtool.h>
 #include <net/dsa.h>
@@ -21,6 +22,9 @@
 #include <asm/mach/arch.h>
 #include <mach/kirkwood.h>
 #include <plat/mvsdio.h>
+#include <plat/orion_nand.h>
+#include <asm/gpio.h>
+#include <plat/gpio.h>
 #include "common.h"
 #include "mpp.h"
 
@@ -76,6 +80,13 @@ static unsigned int rd88f6281_mpp_config[] __initdata = {
 	0
 };
 
+/*****************************************************************************
+ * A2D on I2C bus
+ ****************************************************************************/
+static struct i2c_board_info __initdata i2c_a2d = {
+	I2C_BOARD_INFO("cs42l51", 0x4A),
+};
+
 static void __init rd88f6281_init(void)
 {
 	u32 dev, rev;
@@ -102,6 +113,10 @@ static void __init rd88f6281_init(void)
 	kirkwood_sata_init(&rd88f6281_sata_data);
 	kirkwood_sdio_init(&rd88f6281_mvsdio_data);
 	kirkwood_uart0_init();
+	kirkwood_uart1_init();
+	kirkwood_i2c_init();
+	i2c_register_board_info(0, &i2c_a2d, 1);
+	kirkwood_i2s_init();
 }
 
 static int __init rd88f6281_pci_init(void)

@@ -1,3 +1,4 @@
+
 # ALSA ARM drivers
 
 menuconfig SND_ARM
@@ -39,5 +40,5 @@ config SND_PXA2XX_AC97
 	  Say Y or M if you want to support any AC97 codec attached to
 	  the PXA2xx AC97 interface.
 
-endif	# SND_ARM
 
+endif	# SND_ARM

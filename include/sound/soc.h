@@ -519,6 +519,7 @@ struct snd_soc_device {
 struct snd_soc_pcm_runtime {
 	struct snd_soc_dai_link *dai;
 	struct snd_soc_device *socdev;
+	struct snd_pcm_ops pcm_ops;
 };
 
 /* mixer control */

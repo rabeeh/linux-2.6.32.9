@@ -106,6 +106,58 @@ MODULE_ALIAS("platform:smc911x");
  */
 #define POWER_DOWN		 1
 
+
+/* store this information for the driver.. */
+struct smc911x_local {
+	/*
+	 * If I have to wait until the DMA is finished and ready to reload a
+	 * packet, I will store the skbuff here. Then, the DMA will send it
+	 * out and free it.
+	 */
+	struct sk_buff *pending_tx_skb;
+
+	/* version/revision of the SMC911x chip */
+	u16 version;
+	u16 revision;
+
+	/* FIFO sizes */
+	int tx_fifo_kb;
+	int tx_fifo_size;
+	int rx_fifo_size;
+	int afc_cfg;
+
+	/* Contains the current active receive/phy mode */
+	int ctl_rfduplx;
+	int ctl_rspeed;
+
+	u32 msg_enable;
+	u32 phy_type;
+	struct mii_if_info mii;
+
+	/* work queue */
+	struct work_struct phy_configure;
+
+	int tx_throttle;
+	spinlock_t lock;
+
+	struct net_device *netdev;
+
+#ifdef SMC_USE_DMA
+	/* DMA needs the physical address of the chip */
+	u_long physaddr;
+	int rxdma;
+	int txdma;
+	int rxdma_active;
+	int txdma_active;
+	struct sk_buff *current_rx_skb;
+	struct sk_buff *current_tx_skb;
+	struct device *dev;
+#endif
+
+	/* Interrupt polarity */
+	int int_polarity;
+};
+
 #if SMC_DEBUG > 0
 #define DBG(n, args...)				 \
 	do {					 \
@@ -1916,6 +1968,8 @@ static int __devinit smc911x_probe(struct net_device *dev)
 		"%s: tx_fifo %d rx_fifo %d afc_cfg 0x%08x\n", CARDNAME,
 		lp->tx_fifo_size, lp->rx_fifo_size, lp->afc_cfg);
 
+	lp->int_polarity = int_polarity;
+
 	spin_lock_init(&lp->lock);
 
 	/* Get the MAC address */
@@ -2055,9 +2109,11 @@ err_out:
  */
 static int __devinit smc911x_drv_probe(struct platform_device *pdev)
 {
+	struct smc911x_platdata *pd = pdev->dev.platform_data;
 	struct net_device *ndev;
 	struct resource *res;
 	struct smc911x_local *lp;
+	int int_polarity;
 	unsigned int *addr;
 	int ret;
 
@@ -2104,6 +2160,10 @@ static int __devinit smc911x_drv_probe(struct platform_device *pdev)
 		ret = -ENOMEM;
 		goto release_both;
 	}
+
+	int_polarity = 0;
+	if (pd != NULL)
+		int_polarity = pd->int_polarity;
 
 	platform_set_drvdata(pdev, ndev);
 	lp->base = addr;

@@ -14,7 +14,11 @@
 #define PXA2XX_DAI_AC97_AUX		1
 #define PXA2XX_DAI_AC97_MIC		2
 
+#define PXA3XX_DAI_AC97_SURROUND	0
+#define PXA3XX_DAI_AC97_LFE		1
+
 extern struct snd_soc_dai pxa_ac97_dai[3];
+extern struct snd_soc_dai pxa_ac97_surround_dai[2];
 
 /* platform data */
 extern struct snd_ac97_bus_ops pxa2xx_ac97_ops;

@@ -93,7 +93,11 @@ static u32 __init xscale_cp_access_read(void)
 	u32 value;
 
 	__asm__ __volatile__ (
+#if defined(CONFIG_CPU_PJ4)	
+        "mrc	p15, 0, %0, c1, c0, 2\n\t"
+#else
 		"mrc	p15, 0, %0, c15, c1, 0\n\t"
+#endif		
 		: "=r" (value));
 
 	return value;
@@ -104,8 +108,13 @@ static void __init xscale_cp_access_write(u32 value)
 	u32 temp;
 
 	__asm__ __volatile__ (
+#if defined(CONFIG_CPU_PJ4)	
+        "mcr	p15, 0, %1, c1, c0, 2\n\t"
+		"mrc	p15, 0, %0, c1, c0, 2\n\t"
+#else	
 		"mcr	p15, 0, %1, c15, c1, 0\n\t"
 		"mrc	p15, 0, %0, c15, c1, 0\n\t"
+#endif		
 		"mov	%0, %0\n\t"
 		"sub	pc, pc, #4\n\t"
 		: "=r" (temp) : "r" (value));
@@ -122,6 +131,13 @@ static int __init cpu_has_iwmmxt(void)
 	u32 lo;
 	u32 hi;
 
+#if defined(CONFIG_CPU_PJ4)
+#ifdef CONFIG_IWMMXT
+    return 1;
+#else
+    return 0;
+#endif    
+#endif
 	/*
 	 * This sequence is interpreted by the DSP coprocessor as:
 	 *	mar	acc0, %2, %3
@@ -153,8 +169,13 @@ static int __init xscale_cp0_init(void)
 {
 	u32 cp_access;
 
+#if defined(CONFIG_CPU_PJ4)
+	cp_access = xscale_cp_access_read() & ~0xf;
+	xscale_cp_access_write(cp_access | 0x3);
+#else
 	cp_access = xscale_cp_access_read() & ~3;
 	xscale_cp_access_write(cp_access | 1);
+#endif
 
 	if (cpu_has_iwmmxt()) {
 #ifndef CONFIG_IWMMXT
@@ -165,12 +186,14 @@ static int __init xscale_cp0_init(void)
 		elf_hwcap |= HWCAP_IWMMXT;
 		thread_register_notifier(&iwmmxt_notifier_block);
 #endif
-	} else {
+	} 
+#if defined(CONFIG_CPU_XSCALE) || defined(CONFIG_CPU_XSC3)	
+	else {
 		printk(KERN_INFO "XScale DSP coprocessor detected.\n");
 		thread_register_notifier(&dsp_notifier_block);
 		cp_access |= 1;
 	}
-
+#endif
 	xscale_cp_access_write(cp_access);
 
 	return 0;

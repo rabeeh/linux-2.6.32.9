@@ -120,6 +120,9 @@ EXPORT_SYMBOL(pm_power_off);
 void (*arm_pm_restart)(char str, const char *cmd) = arm_machine_restart;
 EXPORT_SYMBOL_GPL(arm_pm_restart);
 
+void (*arm_shut_down)(void);
+EXPORT_SYMBOL(arm_shut_down);
+
 
 /*
  * This is our default idle handler.  We need to disable
@@ -192,6 +195,8 @@ __setup("reboot=", reboot_setup);
 
 void machine_halt(void)
 {
+	if (arm_shut_down)
+		arm_shut_down();
 }
 
 

@@ -21,6 +21,11 @@
 /* The list ends with an ATAG_NONE node. */
 #define ATAG_NONE	0x00000000
 
+/* Some sanity checks are needed */
+#define ATAG_MAX_SZ	PAGE_SIZE
+#define atag_valid(tag)							\
+	((tag)->hdr.size && ((tag)->hdr.size <= ATAG_MAX_SZ))
+
 struct tag_header {
 	__u32 size;
 	__u32 tag;
@@ -143,6 +148,64 @@ struct tag_memclk {
 	__u32 fmemclk;
 };
 
+#if defined (CONFIG_PM) && defined (CONFIG_ARCH_DOVE)
+
+/* Marvell Dove DRAM parameters */
+#define ATAG_MV_DRAM_PARAMS   	0x41000403
+#define ATAG_MV_DVS_PARAMS   	0x41000404
+
+#define MV_DRAM_HEADERS_CNT	16
+#define MV_DRAM_REG_PAIRS_CNT	200
+
+/* Marvell DRAM frequency bit mask */
+#define MV_DDR_100   		0x00000001
+#define MV_DDR_133   		0x00000002
+#define MV_DDR_167   		0x00000004
+#define MV_DDR_200   		0x00000008
+#define MV_DDR_233   		0x00000010
+#define MV_DDR_250   		0x00000020
+#define MV_DDR_267   		0x00000040
+#define MV_DDR_333   		0x00000080
+#define MV_DDR_400   		0x00000100
+#define MV_DDR_500   		0x00000200
+#define MV_DDR_533   		0x00000400
+#define MV_DDR_ALL   		0xFFFFFFFF
+
+typedef struct __mvDramRegInit
+{
+	u32 		reg_addr;
+	u32 		reg_value;
+} MV_DRAM_REG_INIT;
+
+typedef struct __mvDramInitCtrl
+{
+	u32 		freq_mask;
+	u16 		start_index;
+	u16 		size;
+	u32 		flags;
+} MV_DRAM_INIT_CTRL;
+
+typedef struct __mvDramInit
+{
+	MV_DRAM_INIT_CTRL dram_init_ctrl[MV_DRAM_HEADERS_CNT];
+	MV_DRAM_REG_INIT reg_init[MV_DRAM_REG_PAIRS_CNT];
+} MV_DRAM_INIT;
+
+struct tag_mv_dram {
+	u32 			version;
+	MV_DRAM_INIT 	mv_dram_init;
+};
+
+struct tag_mv_dvs {
+	u32		version;
+	u32		dvs_values;
+	u32		reserved0;
+	u32		reserved1;
+};
+
+#endif /* defined (CONFIG_PM) && defined (CONFIG_ARCH_DOVE) */
+
+
 struct tag {
 	struct tag_header hdr;
 	union {
@@ -165,6 +228,13 @@ struct tag {
 		 * DC21285 specific
 		 */
 		struct tag_memclk	memclk;
+#if defined (CONFIG_PM) && defined (CONFIG_ARCH_DOVE)
+		/*
+		 * Marvell specific
+		 */
+		struct tag_mv_dram    mv_dram;
+		struct tag_mv_dvs     mv_dvs;
+#endif
 	} u;
 };
 
@@ -173,9 +243,10 @@ struct tagtable {
 	int (*parse)(const struct tag *);
 };
 
-#define tag_member_present(tag,member)				\
-	((unsigned long)(&((struct tag *)0L)->member + 1)	\
-		<= (tag)->hdr.size * 4)
+#define tag_member_present(tag,member)					\
+	(atag_valid(tag) &&						\
+		(((unsigned long)(&((struct tag *)0L)->member + 1)	\
+			<= (tag)->hdr.size * 4))
 
 #define tag_next(t)	((struct tag *)((__u32 *)(t) + (t)->hdr.size))
 #define tag_size(type)	((sizeof(struct tag_header) + sizeof(struct type)) >> 2)

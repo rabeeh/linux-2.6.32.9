@@ -1,0 +1,115 @@
+if PLAT_ORION
+
+menu "Orion SoC options"
+depends on MV_HAL_DRIVERS_SUPPORT
+#since the Kconfig parser dispatch all source commands, we call the machines Kconfigs from here and
+#not vice versa because otherwise the plat-feroceon Kconfig will be dispatched twice.     
+
+config MV_INCLUDE_IDMA
+	bool "IDMA Support"
+	default y
+        ---help---
+        Please don't change this configs unless you know what you are doing.
+
+config MV_INCLUDE_USB
+	bool "USB Support"
+	default y
+        ---help---
+        Please don't change this configs unless you know what you are doing.
+
+config MV_INCLUDE_XOR
+	bool "XOR Support"
+	default y
+        ---help---
+        Please don't change this configs unless you know what you are doing.
+
+config MV_INCLUDE_CESA
+	bool "CESA Support"
+	default y
+        ---help---
+        Please don't change this configs unless you know what you are doing.
+
+config MV_INCLUDE_GIG_ETH
+	bool "Giga Ethernet Support"
+	default y
+
+config MV_INCLUDE_AUDIO
+	bool "Audio Support"
+	default y
+        ---help---
+        Please don't change this configs unless you know what you are doing.
+
+config MV_INCLUDE_INTEG_SATA
+        bool "Integrated SATA Support"
+        default y
+        ---help---
+        Please don't change this configs unless you know what you are doing.
+
+config MV_INCLUDE_PMU
+	bool "PM Support"
+	depends on ARCH_DOVE
+	default y
+	---help---
+	Include the support of the Power Management Features.
+	Please don't change this configs unless you know what you are doing.
+
+config MV_INCLUDE_NFC
+	bool "Integrated Nand Flash Support"
+	depends on ARCH_DOVE
+	default y
+	---help---
+	Please don't change this configs unless you know what you are doing.
+
+
+config MV_DDRMMC
+	bool
+	depends on ARCH_DOVE
+	default y
+
+
+endmenu
+
+menu "Soc DMA accelerations"
+
+source arch/arm/plat-orion/mv_hal_drivers/mv_drivers_lsp/mv_xor/Kconfig
+
+#source arch/arm/plat-orion/mv_hal_drivers/mv_drivers_lsp/mv_dma/Kconfig
+
+endmenu
+
+menu "SoC Networking support"
+depends on MV_INCLUDE_GIG_ETH
+
+source arch/arm/plat-orion/mv_hal_drivers/mv_drivers_lsp/mv_network/Kconfig
+
+endmenu
+
+
+source arch/arm/plat-orion/mv_hal_drivers/mv_drivers_lsp/mv_cesa/Kconfig
+
+config  SCSI_MVSATA
+        tristate "Support for Marvell Sata Adapters"
+	depends on MV_HAL_DRIVERS_SUPPORT
+        depends on ( MV_INCLUDE_INTEG_SATA && SCSI ) || ( PCI && SCSI )
+        ---help---
+          Choosing this option will enable you to use the Marvell Sata
+          adapters support with emulation as SCSI adapters.
+          Note that the kernel scsi subsystem must be chosen too.
+
+source arch/arm/plat-orion/mv_hal_drivers/mv_drivers_lsp/mv_sata/Kconfig
+
+# Definitions to make life easier
+config MV_FAST_PATH_ETHERNET
+        bool
+endif
+
+source arch/arm/plat-orion/mv_hal_drivers/mv_drivers_lsp/mv_key/Kconfig
+
+config  MV_DBG_TRACE
+        bool "Enable tracing utility"
+        default n
+        ---help---
+          Choosing this debug option will cause some kernel modules to log operations into
+          a cyclic buffer and dump them on failures. Enabling this feature decreases performance.
+
+

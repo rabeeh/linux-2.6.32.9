@@ -167,12 +167,6 @@ SECTIONS
 		__init_end = .;
 #endif
 
-		. = ALIGN(PAGE_SIZE);
-		__nosave_begin = .;
-		*(.data.nosave)
-		. = ALIGN(PAGE_SIZE);
-		__nosave_end = .;
-
 		/*
 		 * then the cacheline aligned data
 		 */
@@ -255,6 +249,11 @@ SECTIONS
 		__tcm_end = .;
 	}
 #endif
+	. = ALIGN(PAGE_SIZE);
+	__nosave_begin = .;
+	.data.nosave : { *(.data.nosave) }
+	. = ALIGN(PAGE_SIZE);
+	__nosave_end = .;
 
 	.bss : {
 		__bss_start = .;	/* BSS				*/

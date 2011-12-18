@@ -37,6 +37,9 @@
 
 #include <mach/lm.h>
 
+#ifdef CONFIG_CACHE_TAUROS2
+#include <asm/hardware/cache-tauros2.h>
+#endif
 #include <asm/mach/arch.h>
 #include <asm/mach/flash.h>
 #include <asm/mach/irq.h>
@@ -56,6 +59,12 @@
 #define VA_SC_BASE	IO_ADDRESS(INTEGRATOR_SC_BASE)
 #define VA_EBI_BASE	IO_ADDRESS(INTEGRATOR_EBI_BASE)
 #define VA_CMIC_BASE	IO_ADDRESS(INTEGRATOR_HDR_BASE) + INTEGRATOR_HDR_IC_OFFSET
+
+#define PHY_DOVEMC_BASE 0xB0000000
+#define VA_DOVEMC_BASE  IO_ADDRESS(PHY_DOVEMC_BASE)
+
+#define PHY_DOVEMC_BASE 0xB0000000
+#define VA_DOVEMC_BASE  IO_ADDRESS(PHY_DOVEMC_BASE)
 
 /*
  * Logical      Physical
@@ -141,6 +150,16 @@ static struct map_desc ap_io_desc[] __initdata = {
 		.pfn		= __phys_to_pfn(PHYS_PCI_IO_BASE),
 		.length		= SZ_64K,
 		.type		= MT_DEVICE
+        }, {
+                .virtual        = IO_ADDRESS(PHY_DOVEMC_BASE),
+                .pfn            = __phys_to_pfn(PHY_DOVEMC_BASE),
+                .length         = SZ_4K,
+                .type           = MT_DEVICE
+	}, {
+                .virtual        = IO_ADDRESS(PHY_DOVEMC_BASE),
+                .pfn            = __phys_to_pfn(PHY_DOVEMC_BASE),
+                .length         = SZ_4K,
+                .type           = MT_DEVICE
 	}
 };
 
@@ -310,7 +329,9 @@ static void __init ap_init(void)
 {
 	unsigned long sc_dec;
 	int i;
-
+#ifdef CONFIG_CACHE_TAUROS2
+	tauros2_init();
+#endif
 	platform_device_register(&cfi_flash_device);
 
 	sc_dec = readl(VA_SC_BASE + INTEGRATOR_SC_DEC_OFFSET);
@@ -332,6 +353,29 @@ static void __init ap_init(void)
 
 		lm_device_register(lmdev);
 	}
+	/*
+	 * Maseter 0 - CPU
+	 * Maseter 1 - MCB
+	 */
+        sc_dec = readl(VA_DOVEMC_BASE + 0x280);
+        printk("PLiao: DOVE_MC @ 0x280 is %08X\n", sc_dec);
+        sc_dec = sc_dec&0xfffff0ff | 0x00000e00;
+        writel( sc_dec, VA_DOVEMC_BASE + 0x280);
+        /*
+	 * Master 0 - VMeta
+	 * Master 1 - GC500
+	 * Master 2 - LCD
+	 * Master 3 - Upstream (SB)
+	 */
+        sc_dec = readl(VA_DOVEMC_BASE + 0x510);
+        printk("PLiao: DOVE_MC @ 0x510 is %08X\n", sc_dec);
+        sc_dec = sc_dec&0xf0f0f0f0 | 0x010e0101;
+        writel( sc_dec, VA_DOVEMC_BASE + 0x510);
+        sc_dec = readl(VA_DOVEMC_BASE + 0x280);
+        printk("PLiao: DOVE_MC @ 0x280 is %08X after mod\n", sc_dec);
+        sc_dec = readl(VA_DOVEMC_BASE + 0x510);
+        printk("PLiao: DOVE_MC @ 0x510 is %08X after mod\n", sc_dec);
+        /* End of supersection testing */
 }
 
 static void __init ap_init_timer(void)

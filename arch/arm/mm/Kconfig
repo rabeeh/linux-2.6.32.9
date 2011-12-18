@@ -388,7 +388,7 @@ config CPU_FEROCEON_OLD_ID
 
 # ARMv6
 config CPU_V6
-	bool "Support ARM V6 processor" if ARCH_INTEGRATOR || MACH_REALVIEW_EB || MACH_REALVIEW_PBX
+	bool "Support ARM V6 processor" if ARCH_INTEGRATOR || MACH_REALVIEW_EB || MACH_REALVIEW_PBX || ARCH_DOVE
 	select CPU_32v6
 	select CPU_ABRT_EV6
 	select CPU_PABRT_V6
@@ -398,6 +398,7 @@ config CPU_V6
 	select CPU_HAS_ASID if MMU
 	select CPU_COPY_V6 if MMU
 	select CPU_TLB_V6 if MMU
+	select CPU_PJ4 if DOVE_REV_Y0 || ARCH_INTEGRATOR
 
 # ARMv6k
 config CPU_32v6K
@@ -413,7 +414,7 @@ config CPU_32v6K
 
 # ARMv7
 config CPU_V7
-	bool "Support ARM V7 processor" if ARCH_INTEGRATOR || MACH_REALVIEW_EB || MACH_REALVIEW_PBX
+	bool "Support ARM V7 processor" if ARCH_INTEGRATOR || MACH_REALVIEW_EB || MACH_REALVIEW_PBX || ARCH_DOVE
 	select CPU_32v6K
 	select CPU_32v7
 	select CPU_ABRT_EV7
@@ -424,6 +425,7 @@ config CPU_V7
 	select CPU_HAS_ASID if MMU
 	select CPU_COPY_V6 if MMU
 	select CPU_TLB_V7 if MMU
+	select CPU_PJ4 if DOVE_REV_Y0 || ARCH_INTEGRATOR
 
 # Figure out what processor architecture version we should be using.
 # This defines the compiler instruction set which depends on the machine type.
@@ -453,6 +455,9 @@ config CPU_32v6
 
 config CPU_32v7
 	bool
+
+config CPU_PJ4
+        bool
 
 # The abort model
 config CPU_ABRT_NOMMU
@@ -722,7 +727,7 @@ config TLS_REG_EMUL
 config HAS_TLS_REG
 	bool
 	depends on !TLS_REG_EMUL
-	default y if SMP || CPU_32v7
+	default y if SMP || ( CPU_32v7 && !ANDROID)
 	help
 	  This selects support for the CP15 thread register.
 	  It is defined to be available on some ARMv6 processors (including
@@ -767,12 +772,123 @@ config CACHE_L2X0
 config CACHE_XSC3L2
 	bool "Enable the L2 cache on XScale3"
 	depends on CPU_XSC3
-	default y
-	select OUTER_CACHE
-	help
+        default y
+        select OUTER_CACHE
+        help
 	  This option enables the L2 cache on XScale3.
 
 config ARM_L1_CACHE_SHIFT
 	int
 	default 6 if ARCH_OMAP3
 	default 5
+
+config CACHE_TAUROS2
+	bool "Enable the Tauros2 L2 cache controller"
+	depends on MACH_REALVIEW_EB || ARCH_DOVE || ARCH_INTEGRATOR
+	default y
+	select OUTER_CACHE
+	help
+	  This option enables the Tauros2 L2 cache controller (as
+	  found on PJ1/PJ4).
+
+config MRV_PTE_IN_L2
+	bool "Enable Table walk in L2 to improve performance"
+	depends on CACHE_TAUROS2
+	default y
+	help
+	  Say Y if you wan to enable table walk in L2 (MMU get pte
+	  from L2 memory) to improve performance
+
+config CACHE_L2LINEFILL_BURST8_ENABLE
+	bool "Enable L2 Line Fill Burst Length 8"
+	depends on CACHE_TAUROS2 && !MV_L2_PREFETCH_OFF
+	default n
+	help
+	  Say Y to enable L2 line fill burst length to 8
+
+config MV_L2_WA_ON
+       bool "Enable Write allocate for L2 cache"
+        default n
+	 help
+	   Say Y if you want to enable write allocate feature
+	   of L2 cache H/W
+	   depends on CACHE_TAUROS2 && CPU_WA_ENABLE
+
+config MV_L2_PREFETCH_OFF
+	bool "Disable prefetch mode for L2 chache"
+	depends on CACHE_TAUROS2
+	default y
+	help
+	  Say Y if you want to disable prefetch feature
+	  of L2 cache H/W
+
+
+config CPU_PJ4_PMC_ACCESS_IN_USERMODE
+	bool "Enabled User mode access for PMC"
+	depends on CPU_PJ4
+	default n
+	help
+	  Say Y if you allow user mode application to access Performance 
+	  Monitor Counter of PJ4 in user mode
+
+config DOVE_DEBUGGER_MODE_V6
+	bool "Dove debugger mode is V6"
+	depends on ARCH_DOVE
+	default y
+	help
+	  Say Y if Debugger mode of the cpu is v6.
+
+config CPU_ENABLE_WRITECO
+	bool "Enable Write Buffer Coalescing"
+	depends on CPU_PJ4
+	default y
+	help
+	  Say Y if you to enable write buffer coalescing feature
+
+config CPU_WRITECO_CYCLE
+	int "Write Buffer Coalescing cycles"
+	depends on CPU_ENABLE_WRITECO
+	default 3
+	range 0 7
+	help
+	Defines the number of cycles a store might stay in the write 
+	buffer waiting for coalescing.	
+	0 -> no wait cycles
+	1 -> 2 wait cycle
+	2 -> 4 wait cycles
+	3 -> 8 wait cycles
+	4 -> 16 wait cycles
+
+choice
+	prompt "Cache Write Allocate Setting"
+	depends on (CPU_V6 || CPU_V7 || CPU_PJ4) && MV_L2_WA_ON
+
+config CPU_L2WAONLY_ENABLE
+	bool "Support Outer Write Allocate only"
+	depends on CPU_V6 || CPU_V7
+	default y
+	help
+	  Say Y to set Inner cache write allocate only
+
+config CPU_WA_DISABLE
+	bool "Disable Inner & Outer Write Allocate"
+	depends on CPU_V6 || CPU_V7 || CPU_PJ4
+	default n
+	help
+	  Say Y to disable Write allocate support
+endchoice
+
+config CPU_PJ4_ERRATA_4574_4731
+	bool "Marvell CPU errata 4574 and 4731 S/W fix"
+	depends on CPU_PJ4
+	default y
+	help
+	  Say Y to enable Marvell CPU errata S/W work
+	  around for #4574 and #4731
+config CPU_PJ4_ERRATA_4315
+	bool "Marvell CPU errata 4315 S/W fix"
+	depends on CPU_PJ4
+	default y
+	help
+	  Say Y to enable Marvell CPU errata S/W work
+	  around for #4315

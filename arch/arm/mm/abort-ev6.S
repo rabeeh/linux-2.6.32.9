@@ -32,6 +32,7 @@ ENTRY(v6_early_abort)
  * Faulty SWP instruction on 1136 doesn't set bit 11 in DFSR (erratum 326103).
  * The test below covers all the write situations, including Java bytecodes
  */
+#if 0 /* Uncomment it because it will cause Thumb2 rootfs cannot mounting*/
 	bic	r1, r1, #1 << 11		@ clear bit 11 of FSR
 	tst	r3, #PSR_J_BIT			@ Java?
 	movne	pc, lr
@@ -43,6 +44,7 @@ ENTRY(v6_early_abort)
 	do_ldrd_abort
 	tst	r3, #1 << 20			@ L = 0 -> write
 	orreq	r1, r1, #1 << 11		@ yes.
+#endif
 	mov	pc, lr
 
 

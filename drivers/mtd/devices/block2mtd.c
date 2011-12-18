@@ -21,6 +21,7 @@
 #define ERROR(fmt, args...) printk(KERN_ERR "block2mtd: " fmt "\n" , ## args)
 #define INFO(fmt, args...) printk(KERN_INFO "block2mtd: " fmt "\n" , ## args)
 
+#define MTD_PAGE_MASK	(~((loff_t)(PAGE_SIZE-1)))
 
 /* Info for the block device */
 struct block2mtd_dev {
@@ -146,7 +147,7 @@ static int _block2mtd_write(struct block2mtd_dev *dev, const u_char *buf,
 	struct page *page;
 	struct address_space *mapping = dev->blkdev->bd_inode->i_mapping;
 	int index = to >> PAGE_SHIFT;	// page index
-	int offset = to & ~PAGE_MASK;	// page offset
+	int offset = to & ~MTD_PAGE_MASK;	// page offset
 	int cpylen;
 
 	if (retlen)
@@ -283,7 +284,7 @@ static struct block2mtd_dev *add_device(char *devname, int erase_size)
 	sprintf(name, "block2mtd: %s", devname);
 	dev->mtd.name = name;
 
-	dev->mtd.size = dev->blkdev->bd_inode->i_size & PAGE_MASK;
+	dev->mtd.size = dev->blkdev->bd_inode->i_size & MTD_PAGE_MASK;
 	dev->mtd.erasesize = erase_size;
 	dev->mtd.writesize = 1;
 	dev->mtd.type = MTD_RAM;

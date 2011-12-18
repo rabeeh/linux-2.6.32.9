@@ -45,6 +45,9 @@ ENTRY(cpu_v6_proc_fin)
 	stmfd	sp!, {lr}
 	cpsid	if				@ disable interrupts
 	bl	v6_flush_kern_cache_all
+#if defined(CONFIG_CACHE_TAUROS2)
+	mcr	p15, 1, r0, c7, c11, 0		@ L2C clean all
+#endif
 	mrc	p15, 0, r0, c1, c0, 0		@ ctrl register
 	bic	r0, r0, #0x1000			@ ...i............
 	bic	r0, r0, #0x0006			@ .............ca.
@@ -77,11 +80,21 @@ ENTRY(cpu_v6_do_idle)
 	mov	r1, #0
 	mcr	p15, 0, r1, c7, c10, 4		@ DWB - WFI may enter a low-power mode
 	mcr	p15, 0, r1, c7, c0, 4		@ wait for interrupt
+#ifdef CONFIG_DOVE_REV_Y0
+	mrc	p15, 0, r0, c0, c0, 0		@ Main ID
+	and	r0, #0xF
+	cmp	r0, #1				@ issue the following instructions for Y0 only
+	mcreq   p15, 0, r1, c7, c5, 4           @ Prefetch Flush - ISB
+	mcreq	p15, 0, r1, c7, c10, 4		@ Sync Data barrier
+#endif
 	mov	pc, lr
 
 ENTRY(cpu_v6_dcache_clean_area)
 #ifndef TLB_CAN_READ_FROM_L1_CACHE
 1:	mcr	p15, 0, r0, c7, c10, 1		@ clean D entry
+#ifndef CONFIG_MRV_PTE_IN_L2
+	mcr     p15, 1, r0, c7, c11, 1		@ clean L2C D entry
+#endif
 	add	r0, r0, #D_CACHE_LINE_SIZE
 	subs	r1, r1, #D_CACHE_LINE_SIZE
 	bhi	1b
@@ -102,7 +115,11 @@ ENTRY(cpu_v6_switch_mm)
 #ifdef CONFIG_MMU
 	mov	r2, #0
 	ldr	r1, [r1, #MM_CONTEXT_ID]	@ get mm->context.id
+#ifdef CONFIG_MRV_PTE_IN_L2
 	orr	r0, r0, #TTB_FLAGS
+#else
+	bic     r0, r0, #0x18                   @ DONOT Cache the page table in L2
+#endif
 	mcr	p15, 0, r2, c7, c5, 6		@ flush BTAC/BTB
 	mcr	p15, 0, r2, c7, c10, 4		@ drain write buffer
 	mcr	p15, 0, r0, c2, c0, 0		@ set TTB 0
@@ -132,7 +149,19 @@ ENTRY(cpu_v6_set_pte_ext)
 
 
 cpu_v6_name:
-	.asciz	"ARMv6-compatible processor"
+	.asciiz	"ARMv6-compatible processor"
+	.size	cpu_v6_name, . - cpu_v6_name
+
+cpu_pj4_name:
+	.ascii	"Marvell PJ4 v6 processor"
+#ifdef CONFIG_IWMMXT
+	.ascii	"-wmmx"
+#endif
+#ifdef CONFIG_CPU_ENABLE_WRITECO
+	.ascii	"-wco"
+#endif
+	.ascii	"\0"
+	.size	cpu_pj4_name, . - cpu_pj4_name
 	.align
 
 	__INIT
@@ -159,6 +188,14 @@ __v6_setup:
 	mcr	p15, 0, r0, c1, c0, 1
 #endif
 
+#ifdef CONFIG_CPU_PJ4_PMC_ACCESS_IN_USERMODE
+	@ Enable performance counters user access
+        mrc     p15, 0, r0, c9, c14, 0
+        orr     r0, r0, #0x1
+        mcr     p15, 0, r0, c9, c14, 0
+#endif /* CONFIG_CPU_PJ4_PMC_ACCESS_IN_USERMODE */
+
+
 	mov	r0, #0
 	mcr	p15, 0, r0, c7, c14, 0		@ clean+invalidate D cache
 	mcr	p15, 0, r0, c7, c5, 0		@ invalidate I cache
@@ -167,9 +204,22 @@ __v6_setup:
 #ifdef CONFIG_MMU
 	mcr	p15, 0, r0, c8, c7, 0		@ invalidate I + D TLBs
 	mcr	p15, 0, r0, c2, c0, 2		@ TTB control register
+#ifdef CONFIG_MRV_PTE_IN_L2
 	orr	r4, r4, #TTB_FLAGS
+#else
+						@ OC bits in TTB1 register
+	bic	r4, r4, #0x18                   @ DONOT Cache the page table in L2
+#endif
 	mcr	p15, 0, r4, c2, c0, 1		@ load TTB1
 #endif /* CONFIG_MMU */
+#ifdef CONFIG_CPU_ENABLE_WRITECO
+						@ Refer 88SV581x-v6.Rev1.5.pdf
+	mrc	p15, 1, r0, c15, c1, 0		@ Marvell Extra Features Reg
+	orr	r0, r0, #0x100
+						@ Write coalesce cycles
+	orr	r0, r0, #CONFIG_CPU_WRITECO_CYCLE << 9
+	mcr	p15, 1, r0, c15, c1, 0		@ Marvell Extra Features Reg
+#endif
 	adr	r5, v6_crval
 	ldmia	r5, {r5, r6}
 #ifdef CONFIG_CPU_ENDIAN_BE8
@@ -205,7 +255,7 @@ ENTRY(v6_processor_functions)
 
 	.type	cpu_arch_name, #object
 cpu_arch_name:
-	.asciz	"armv6"
+	.ascii	"armv6"
 	.size	cpu_arch_name, . - cpu_arch_name
 
 	.type	cpu_elf_name, #object
@@ -221,8 +271,8 @@ cpu_elf_name:
 	 */
 	.type	__v6_proc_info, #object
 __v6_proc_info:
-	.long	0x0007b000
-	.long	0x0007f000
+	.long	0x000f0000
+	.long	0x000f0000
 	.long   PMD_TYPE_SECT | \
 		PMD_SECT_AP_WRITE | \
 		PMD_SECT_AP_READ | \
@@ -241,3 +291,26 @@ __v6_proc_info:
 	.long	v6_user_fns
 	.long	v6_cache_fns
 	.size	__v6_proc_info, . - __v6_proc_info
+
+	.type	__pj4_v6_proc_info, #object
+__pj4_v6_proc_info:
+	.long	0x560f5810
+	.long	0xff0ffff0
+	.long   PMD_TYPE_SECT | \
+		PMD_SECT_AP_WRITE | \
+		PMD_SECT_AP_READ | \
+		PMD_FLAGS
+	.long   PMD_TYPE_SECT | \
+		PMD_SECT_XN | \
+		PMD_SECT_AP_WRITE | \
+		PMD_SECT_AP_READ
+	b	__v6_setup
+	.long	cpu_arch_name
+	.long	cpu_elf_name
+	.long	HWCAP_SWP|HWCAP_HALF|HWCAP_THUMB|HWCAP_FAST_MULT|HWCAP_EDSP
+	.long	cpu_pj4_name
+	.long	v6_processor_functions
+	.long	v6wbi_tlb_fns
+	.long	v6_user_fns
+	.long	v6_cache_fns
+	.size	__pj4_v6_proc_info, . - __pj4_v6_proc_info

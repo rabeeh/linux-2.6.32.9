@@ -26,8 +26,11 @@ read_buffer(char* page, char** start, off_t off, int count,
 
 	return count;
 }
-
+#if defined (CONFIG_PM) && defined (CONFIG_ARCH_DOVE)
+#define BOOT_PARAMS_SIZE (1536  + 2532)
+#else
 #define BOOT_PARAMS_SIZE 1536
+#endif
 static char __initdata atags_copy[BOOT_PARAMS_SIZE];
 
 void __init save_atags(const struct tag *tags)
@@ -51,7 +54,7 @@ static int __init init_atags_procfs(void)
 		return -EINVAL;
 	}
 
-	for (; tag->hdr.size; tag = tag_next(tag))
+	for (; atag_valid(tag); tag = tag_next(tag))
 		;
 
 	/* include the terminating ATAG_NONE */

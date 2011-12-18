@@ -20,26 +20,12 @@
 #include <linux/irq.h>
 #include <asm/mach/time.h>
 #include <mach/bridge-regs.h>
-#include <mach/hardware.h>
+#include <plat/time.h>
 
 /*
  * Number of timer ticks per jiffy.
  */
 static u32 ticks_per_jiffy;
-
-
-/*
- * Timer block registers.
- */
-#define TIMER_CTRL		(TIMER_VIRT_BASE + 0x0000)
-#define  TIMER0_EN		0x0001
-#define  TIMER0_RELOAD_EN	0x0002
-#define  TIMER1_EN		0x0004
-#define  TIMER1_RELOAD_EN	0x0008
-#define TIMER0_RELOAD		(TIMER_VIRT_BASE + 0x0010)
-#define TIMER0_VAL		(TIMER_VIRT_BASE + 0x0014)
-#define TIMER1_RELOAD		(TIMER_VIRT_BASE + 0x0018)
-#define TIMER1_VAL		(TIMER_VIRT_BASE + 0x001c)
 
 
 /*

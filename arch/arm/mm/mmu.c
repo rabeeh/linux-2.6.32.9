@@ -192,6 +192,7 @@ void adjust_cr(unsigned long mask, unsigned long set)
 
 #define PROT_PTE_DEVICE		L_PTE_PRESENT|L_PTE_YOUNG|L_PTE_DIRTY|L_PTE_WRITE
 #define PROT_SECT_DEVICE	PMD_TYPE_SECT|PMD_SECT_AP_WRITE
+#define PROT_SO_EXEC_DEVICE	PMD_TYPE_SECT|PMD_SECT_AP_WRITE
 
 static struct mem_type mem_types[] = {
 	[MT_DEVICE] = {		  /* Strongly ordered / ARMv6 shared device */
@@ -256,6 +257,12 @@ static struct mem_type mem_types[] = {
 	[MT_MEMORY_NONCACHED] = {
 		.prot_sect = PMD_TYPE_SECT | PMD_SECT_AP_WRITE,
 		.domain    = DOMAIN_KERNEL,
+	},
+	[MT_EXEC_REGS] = {	  /* Strongly ordered executable device (registers) */
+		.prot_pte	= PROT_PTE_DEVICE,
+		.prot_l1	= PMD_TYPE_TABLE,
+		.prot_sect	= PROT_SO_EXEC_DEVICE | PMD_SECT_UNCACHED,
+		.domain		= DOMAIN_IO,
 	},
 };
 
@@ -1068,4 +1075,6 @@ void setup_mm_for_reboot(char mode)
 		pmd[1] = __pmd(pmdval + (1 << (PGDIR_SHIFT - 1)));
 		flush_pmd_entry(pmd);
 	}
+
+	local_flush_tlb_all();
 }

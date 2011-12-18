@@ -12,7 +12,8 @@
 #include <sound/pcm_params.h>
 #include <sound/pxa2xx-lib.h>
 
-#include <mach/dma.h>
+#include <asm/dma.h>
+#include <mach/pxa-regs.h>
 
 #include "pxa2xx-pcm.h"
 
@@ -54,9 +55,11 @@ int __pxa2xx_pcm_hw_params(struct snd_pcm_substream *substream,
 		dma_desc->ddadr = next_desc_phys;
 		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 			dma_desc->dsadr = dma_buff_phys;
-			dma_desc->dtadr = rtd->params->dev_addr;
+			dma_desc->dtadr =
+				AC97_REG_4_PDMA(rtd->params->dev_addr);
 		} else {
-			dma_desc->dsadr = rtd->params->dev_addr;
+			dma_desc->dsadr =
+				AC97_REG_4_PDMA(rtd->params->dev_addr);
 			dma_desc->dtadr = dma_buff_phys;
 		}
 		if (period > totsize)
@@ -204,7 +207,7 @@ int __pxa2xx_pcm_open(struct snd_pcm_substream *substream)
 				       &rtd->dma_desc_array_phys, GFP_KERNEL);
 	if (!rtd->dma_desc_array)
 		goto err1;
-
+	rtd->dma_ch = -1;
 	runtime->private_data = rtd;
 	return 0;
 

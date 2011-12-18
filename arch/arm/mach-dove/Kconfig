@@ -1,0 +1,113 @@
+if ARCH_DOVE
+
+config  MV_HAL_RULES_PATH
+        string "path of the mvRules.mk file for HAL drivers"
+        default "arch/arm/mach-dove/mv_hal_support/mvRules.mk"
+        ---help---
+	
+#source "arch/arm/plat-orion/mv_hal_drivers/Kconfig"
+
+menu "Marvell Dove Implementations"
+choice
+	prompt "Dove SoC Silicon Revision"
+	default DOVE_REV_Y0
+
+config DOVE_REV_Y0
+	bool "Dove Revision Y0"
+	help
+	  This enables support for Dove Y0 silicon
+
+endchoice
+
+config GLOBAL_PREEMPT_NOTIFIERS
+	bool "Enable global preempt notifier"
+	select PREEMPT_NOTIFIERS
+	default y
+
+config MACH_DOVE_RD_AVNG
+	bool "Marvell RD-MV88F6781 Avengers Reference design platform"
+	select I2C_BOARDINFO
+	depends on DOVE_REV_Y0
+	help
+	  Say 'Y' here if you want your kernel to support the
+	  Marvell RD-MV88F6781 Avengers Mobile Internet Device Reference design
+	  platform.
+
+config MACH_DOVE_RD_AVNG_V3
+	bool "Marvell RD-88AP510 Avengers Reference design V3 platform"
+	select I2C_BOARDINFO
+	depends on DOVE_REV_Y0
+	help
+	  Say 'Y' here if you want your kernel to support the
+	  Marvell RD-88AP510 Avengers Mobile Internet Device Reference design V3
+	  platform 
+
+
+config MV_INCLUDE_MPP_SYSFS
+        bool "Avengers MPP sysfs Support"
+        depends on MACH_DOVE_RD_AVNG_Z0 || MACH_DOVE_RD_AVNG
+        default y
+        ---help---
+        Please don't change this configs unless you know what you are doing.
+
+config MACH_DOVE_RD
+	bool "Marvell RD-MV88F6781 Reference design platform"
+	select I2C_BOARDINFO
+	help
+	  Say 'Y' here if you want your kernel to support the
+	  Marvell RD-MV88F6781 Reference design platform.
+
+config MACH_DOVE_DB
+	bool "Marvell DB-MV88F6781 Development Board"
+	select I2C_BOARDINFO
+	depends on DOVE_REV_Y0
+	help
+	  Say 'Y' here if you want your kernel to support the
+
+config MACH_DOVE_DB_B
+	bool "Marvell DB-88AP510-BP-B Development Board"
+	select I2C_BOARDINFO
+	depends on DOVE_REV_Y0
+	help
+	  Say 'Y' here if you want your kernel to support the
+
+config DOVE_DB_USE_GPIO_I2C
+        bool "Use gpio-i2c driver for TWSI option 2 bus"
+	select I2C_GPIO
+	depends on MACH_DOVE_DB_B
+	default n
+	help
+	  Say 'Y' here is you want to use the gpio-i2c driver to control
+	  TWSI option2 wires. This is usefull when this bus used for VGA
+	  port and DDC1 screen is connected.
+
+config MACH_DOVE_VIDEOPLUG
+       bool "Marvell 88AP510 Video Plug Board"
+       select I2C_BOARDINFO
+       depends on DOVE_REV_Y0
+       help
+	  Say 'Y' here if you want your kernel to support the
+	  Marvell  88AP510 Video Plug Board.
+
+endmenu
+
+config MV_HAL_DRIVERS_SUPPORT
+	bool "Enable HAL based drivers support"
+	depends on ARCH_DOVE
+	select MV_INCLUDE_INTEG_SATA
+	help
+	  Say 'Y' here if you want your kernel to support HAL 
+	  based drivers where possible.
+
+config DOVE_PM_SUPPORT
+	depends on PM && MV_INCLUDE_PMU && MV_HAL_DRIVERS_SUPPORT
+	def_bool y
+
+config MV_EXT_VGA_CLOCK
+       tristate "Marvell external IDT5V49EE503 clock on 88AP510 Board"
+       help
+	  Say 'Y' here if you want your kernel to support the
+	  external video clock on Marvell  88AP510 Board.
+	  This clock enables dual-head VGA out with different resolution
+
+endif

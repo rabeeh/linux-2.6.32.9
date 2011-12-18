@@ -55,6 +55,17 @@ config MMC_SDHCI_PCI
 
 	  If unsure, say N.
 
+config MMC_SDHCI_MV
+	tristate "SDHCI support on Marvell's soc"
+	depends on MMC_SDHCI
+	help
+	  This selects the Secure Digital Host Controller Interface in
+	  Marvell's SoC controllers.
+
+	  If you have a controller with this interface, say Y or M here.
+
+	  If unsure, say N.
+
 config MMC_RICOH_MMC
 	tristate "Ricoh MMC Controller Disabler  (EXPERIMENTAL)"
 	depends on MMC_SDHCI_PCI

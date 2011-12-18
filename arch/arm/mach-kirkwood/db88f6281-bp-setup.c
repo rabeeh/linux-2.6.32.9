@@ -11,6 +11,11 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/platform_device.h>
+#include <linux/pci.h>
+#include <linux/irq.h>
+#include <linux/i2c.h>
+#include <linux/mtd/physmap.h>
+#include <linux/mtd/nand.h>
 #include <linux/mtd/partitions.h>
 #include <linux/ata_platform.h>
 #include <linux/mv643xx_eth.h>
@@ -18,6 +23,7 @@
 #include <asm/mach/arch.h>
 #include <mach/kirkwood.h>
 #include <plat/mvsdio.h>
+#include <plat/orion_nand.h>
 #include "common.h"
 #include "mpp.h"
 
@@ -37,6 +43,34 @@ static struct mtd_partition db88f6281_nand_parts[] = {
 	},
 };
 
+static struct resource db88f6281_nand_resource = {
+	.flags		= IORESOURCE_MEM,
+	.start		= KIRKWOOD_NAND_MEM_PHYS_BASE,
+	.end		= KIRKWOOD_NAND_MEM_PHYS_BASE +
+			  KIRKWOOD_NAND_MEM_SIZE - 1,
+};
+
+static struct orion_nand_data db88f6281_nand_data = {
+	.parts		= db88f6281_nand_parts,
+	.nr_parts	= ARRAY_SIZE(db88f6281_nand_parts),
+	.cle		= 0,
+	.ale		= 1,
+	.width		= 8,
+	.chip_delay	= 25,
+};
+
+static struct platform_device db88f6281_nand_flash = {
+	.name		= "orion_nand",
+	.id		= -1,
+	.dev		= {
+		.platform_data	= &db88f6281_nand_data,
+	},
+	.resource	= &db88f6281_nand_resource,
+	.num_resources	= 1,
+};
+#ifdef CONFIG_MV_ETHERNET
+#include "../plat-orion/mv_hal_drivers/mv_drivers_lsp/mv_network/mv_ethernet/mv_netdev.h"
+#endif
 static struct mv643xx_eth_platform_data db88f6281_ge00_data = {
 	.phy_addr	= MV643XX_ETH_PHY_ADDR(8),
 };
@@ -56,6 +90,10 @@ static unsigned int db88f6281_mpp_config[] __initdata = {
 	0
 };
 
+static struct i2c_board_info __initdata i2c_a2d = {
+	I2C_BOARD_INFO("cs42l51", 0x4A),
+};
+
 static void __init db88f6281_init(void)
 {
 	/*
@@ -67,9 +105,17 @@ static void __init db88f6281_init(void)
 	kirkwood_nand_init(ARRAY_AND_SIZE(db88f6281_nand_parts), 25);
 	kirkwood_ehci_init();
 	kirkwood_ge00_init(&db88f6281_ge00_data);
+#ifdef CONFIG_MV_ETHERNET
+	kirkwood_eth0_init();
+#endif
 	kirkwood_sata_init(&db88f6281_sata_data);
 	kirkwood_uart0_init();
 	kirkwood_sdio_init(&db88f6281_mvsdio_data);
+	
+	kirkwood_i2c_init();
+	kirkwood_i2s_init();
+	platform_device_register(&db88f6281_nand_flash);
+	i2c_register_board_info(0, &i2c_a2d, 1);
 }
 
 static int __init db88f6281_pci_init(void)

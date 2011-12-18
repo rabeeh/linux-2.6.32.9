@@ -185,6 +185,8 @@ CONFIG_ARCH_KIRKWOOD=y
 # CONFIG_ARCH_DAVINCI is not set
 # CONFIG_ARCH_OMAP is not set
 # CONFIG_ARCH_BCMRING is not set
+CONFIG_MV88F6281=y
+# CONFIG_MV_HAL_DRIVERS is not set
 
 #
 # Marvell Kirkwood Implementations
@@ -196,6 +198,43 @@ CONFIG_MACH_MV88F6281GTW_GE=y
 CONFIG_MACH_SHEEVAPLUG=y
 CONFIG_MACH_TS219=y
 CONFIG_MACH_OPENRD_BASE=y
+
+#
+# Orion SoC options
+#
+CONFIG_MV_INCLUDE_IDMA=y
+CONFIG_MV_INCLUDE_USB=y
+CONFIG_MV_INCLUDE_XOR=y
+CONFIG_MV_INCLUDE_CESA=y
+CONFIG_MV_INCLUDE_GIG_ETH=y
+CONFIG_MV_INCLUDE_AUDIO=y
+CONFIG_MV_INCLUDE_INTEG_SATA=y
+
+#
+# Soc DMA accelerations
+#
+# CONFIG_MV_USE_XOR_ENGINE is not set
+
+#
+# SoC Networking support
+#
+# CONFIG_MV_ETHERNET is not set
+
+#
+# cesa options
+#
+CONFIG_MV_CESA=y
+# CONFIG_MV_CESA_TOOL is not set
+# CONFIG_SCSI_MVSATA is not set
+
+#
+# Marvell Key driver
+#
+# CONFIG_MV_GPIO_KEY is not set
+# CONFIG_MV_TOUCH_KEY is not set
+# CONFIG_MV_TOUCH_SLIDER is not set
+# CONFIG_MV_DBG_TRACE is not set
+>>>>>>> kirkwood: add kconfig flag for building Marvell HAL drivers:arch/arm/configs/kirkwood_defconfig
 CONFIG_PLAT_ORION=y
 
 #
@@ -537,6 +576,7 @@ CONFIG_MTD_NAND_IDS=y
 # CONFIG_MTD_NAND_PLATFORM is not set
 # CONFIG_MTD_ALAUDA is not set
 CONFIG_MTD_NAND_ORION=y
+# CONFIG_MTD_NAND_DOVE is not set
 # CONFIG_MTD_ONENAND is not set
 
 #
@@ -931,6 +971,7 @@ CONFIG_KEYBOARD_GPIO=y
 #
 CONFIG_SERIO=y
 CONFIG_SERIO_SERPORT=y
+# CONFIG_SERIO_KB3310 is not set
 # CONFIG_SERIO_PCIPS2 is not set
 CONFIG_SERIO_LIBPS2=y
 # CONFIG_SERIO_RAW is not set
@@ -1009,6 +1050,7 @@ CONFIG_I2C_HELPER_AUTO=y
 #
 # CONFIG_I2C_GPIO is not set
 CONFIG_I2C_MV64XXX=y
+# CONFIG_I2C_MV64XXX_PORT_EXPANDER is not set
 # CONFIG_I2C_OCORES is not set
 # CONFIG_I2C_SIMTEC is not set
 
@@ -1035,6 +1077,7 @@ CONFIG_I2C_MV64XXX=y
 #
 # CONFIG_DS1682 is not set
 # CONFIG_SENSORS_TSL2550 is not set
+# CONFIG_MAX1535 is not set
 # CONFIG_I2C_DEBUG_CORE is not set
 # CONFIG_I2C_DEBUG_ALGO is not set
 # CONFIG_I2C_DEBUG_BUS is not set
@@ -1049,6 +1092,7 @@ CONFIG_SPI_MASTER=y
 # CONFIG_SPI_BITBANG is not set
 # CONFIG_SPI_GPIO is not set
 CONFIG_SPI_ORION=y
+# CONFIG_SPI_MV is not set
 
 #
 # SPI Protocol Masters
@@ -1080,7 +1124,6 @@ CONFIG_GPIO_SYSFS=y
 # PCI GPIO expanders:
 #
 # CONFIG_GPIO_BT8XX is not set
-# CONFIG_GPIO_LANGWELL is not set
 
 #
 # SPI GPIO expanders:
@@ -1684,8 +1727,7 @@ CONFIG_ARM_UNWIND=y
 CONFIG_DEBUG_USER=y
 CONFIG_DEBUG_ERRORS=y
 # CONFIG_DEBUG_STACK_USAGE is not set
-CONFIG_DEBUG_LL=y
-# CONFIG_DEBUG_ICEDCC is not set
+# CONFIG_DEBUG_LL is not set
 
 #
 # Security options
@@ -1793,6 +1835,11 @@ CONFIG_CRYPTO_ARC4=y
 CONFIG_CRYPTO_HW=y
 CONFIG_CRYPTO_DEV_MV_CESA=y
 # CONFIG_CRYPTO_DEV_HIFN_795X is not set
+
+#
+# OCF Configuration
+#
+# CONFIG_OCF_OCF is not set
 CONFIG_BINARY_PRINTF=y
 
 #

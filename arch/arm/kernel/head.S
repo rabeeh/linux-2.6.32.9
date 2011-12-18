@@ -194,6 +194,23 @@ ENDPROC(__enable_mmu)
  */
 	.align	5
 __turn_mmu_on:
+#ifdef CONFIG_DOVE_REV_Y0
+	mrc	p15, 0, r3, c0, c0, 0		@ Main ID
+	and	r3, #0xF
+	cmp	r3, #5
+	blt	2f
+	cmp	r3, #1
+	mrc     p15, 1, r3, c15, c1, 1
+	bicle   r3, r3, #1                      @ Turn off return stack
+	mcr     p15, 1, r3, c15, c1, 1		@ for Dove X0 and A0
+	b	1f
+2:
+	mrc     p15, 0, r3, c1, c0, 1
+	bic	r3, r3, #1			@ Turn off return stack
+						@ 3383
+	mcr	p15, 0, r3, c1, c0, 1
+1:	
+#endif
 	mov	r0, r0
 	mcr	p15, 0, r0, c1, c0, 0		@ write control reg
 	mrc	p15, 0, r3, c0, c0, 0		@ read id reg

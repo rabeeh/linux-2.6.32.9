@@ -57,6 +57,7 @@
 #define	SR_BP0			4	/* Block protect 0 */
 #define	SR_BP1			8	/* Block protect 1 */
 #define	SR_BP2			0x10	/* Block protect 2 */
+#define SR_BP3			0x20	/* Block protect 3 */
 #define	SR_SRWD			0x80	/* SR write protect */
 
 /* Define max times to check status register before we give up. */
@@ -80,6 +81,7 @@ struct m25p {
 	unsigned		partitioned:1;
 	u8			erase_opcode;
 	u8			command[CMD_SIZE + FAST_READ_DUMMY_BYTE];
+	u8			vendor_id;
 };
 
 static inline struct m25p *mtd_to_m25p(struct mtd_info *mtd)
@@ -575,6 +577,84 @@ time_out:
 	return ret;
 }
 
+static int m25p80_lock(struct mtd_info *mtd, loff_t ofs, uint64_t len)
+{
+	struct m25p *flash = mtd_to_m25p(mtd);
+	u8 sr;
+
+	DEBUG(MTD_DEBUG_LEVEL2, "%s: %s %s 0x%08x, len %llu\n",
+	      dev_name(&flash->spi->dev), __func__, "offset",
+			(u32)ofs, len);
+
+	/* sanity checks */
+	if (!len)
+		return 0;
+
+	if (ofs + len > flash->mtd.size)
+		return -EINVAL;
+
+	mutex_lock(&flash->lock);
+
+	/* Wait till previous write/erase is done. */
+	if (wait_till_ready(flash)) {
+		/* REVISIT status return?? */
+		mutex_unlock(&flash->lock);
+		return 1;
+	}
+
+	/* Lock all */
+	sr = (SR_BP0 | SR_BP1 | SR_BP2);
+
+	if (flash->vendor_id == 0xc2)
+		sr |= SR_BP3;
+
+	sr |= SR_SRWD;
+
+	write_enable(flash);
+	write_sr(flash, sr);
+
+	mutex_unlock(&flash->lock);
+
+	return 0;
+}
+
+static int m25p80_unlock(struct mtd_info *mtd, loff_t ofs, uint64_t len)
+{
+	struct m25p *flash = mtd_to_m25p(mtd);
+	u8 sr;
+
+	DEBUG(MTD_DEBUG_LEVEL2, "%s: %s %s 0x%08x, len %llu\n",
+	      dev_name(&flash->spi->dev), __func__, "offset",
+			(u32)ofs, (long long) len);
+
+	/* sanity checks */
+	if (!len)
+		return 0;
+
+	if (ofs + len > flash->mtd.size)
+		return -EINVAL;
+
+	mutex_lock(&flash->lock);
+
+	/* Wait till previous write/erase is done. */
+	if (wait_till_ready(flash)) {
+		/* REVISIT status return?? */
+		mutex_unlock(&flash->lock);
+		return 1;
+	}
+
+	/* Unlock all */
+	sr = 0;
+	sr |= SR_SRWD;
+
+	write_enable(flash);
+	write_sr(flash, sr);
+
+	mutex_unlock(&flash->lock);
+
+	return 0;
+}
+
 /****************************************************************************/
 
 /*
@@ -675,6 +755,11 @@ static struct flash_info __devinitdata m25p_data [] = {
 	{ "w25x16", 0xef3015, 0, 64 * 1024, 32, SECT_4K, },
 	{ "w25x32", 0xef3016, 0, 64 * 1024, 64, SECT_4K, },
 	{ "w25x64", 0xef3017, 0, 64 * 1024, 128, SECT_4K, },
+
+	/* MXIC -- single (large) sector size only */
+	{ "mx25l1605", 0xc22015, 0, 64 * 1024, 32, },
+	{ "mx25l3205", 0xc22016, 0, 64 * 1024, 64, },
+	{ "mx25l6405", 0xc22017, 0, 64 * 1024, 128, },
 };
 
 static struct flash_info *__devinit jedec_probe(struct spi_device *spi)
@@ -802,6 +887,12 @@ static int __devinit m25p_probe(struct spi_device *spi)
 		flash->mtd.write = sst_write;
 	else
 		flash->mtd.write = m25p80_write;
+
+	flash->mtd.lock = m25p80_lock;
+	flash->mtd.unlock = m25p80_unlock;
+
+	/* keep the vendor id here */
+	flash->vendor_id = (u8)(info->jedec_id >> 16);
 
 	/* prefer "small sector" erase if possible */
 	if (info->flags & SECT_4K) {

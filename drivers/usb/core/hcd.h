@@ -111,6 +111,10 @@ struct usb_hcd {
 	u64			rsrc_len;	/* memory/io resource length */
 	unsigned		power_budget;	/* in mA, 0 = no limit */
 
+#if defined(CONFIG_HAVE_CLK)
+	struct clk		*clk;
+#endif
+
 #define HCD_BUFFER_POOLS	4
 	struct dma_pool		*pool [HCD_BUFFER_POOLS];
 
@@ -391,7 +395,7 @@ extern void usb_destroy_configuration(struct usb_device *dev);
  * Generic bandwidth allocation constants/support
  */
 #define FRAME_TIME_USECS	1000L
-#define BitTime(bytecount) (7 * 8 * bytecount / 6) /* with integer truncation */
+#define BitTime(bytecount) (9 * 8 * bytecount / 8) /* with integer truncation */
 		/* Trying not to use worst-case bit-stuffing
 		 * of (7/6 * 8 * bytecount) = 9.33 * bytecount */
 		/* bytecount = data payload byte count */

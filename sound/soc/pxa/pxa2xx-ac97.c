@@ -20,8 +20,12 @@
 #include <sound/pxa2xx-lib.h>
 
 #include <mach/hardware.h>
+#include <mach/pxa-regs.h>
 #include <mach/regs-ac97.h>
+#ifndef CONFIG_ARCH_DOVE
 #include <mach/dma.h>
+#endif
+
 #include <mach/audio.h>
 
 #include "pxa2xx-pcm.h"
@@ -193,7 +197,7 @@ struct snd_soc_dai pxa_ac97_dai[] = {
 	.playback = {
 		.stream_name = "AC97 Playback",
 		.channels_min = 2,
-		.channels_max = 2,
+		.channels_max = 6,
 		.rates = PXA2XX_AC97_RATES,
 		.formats = SNDRV_PCM_FMTBIT_S16_LE,},
 	.capture = {

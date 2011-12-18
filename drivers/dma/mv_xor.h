@@ -22,6 +22,7 @@
 #include <linux/io.h>
 #include <linux/dmaengine.h>
 #include <linux/interrupt.h>
+#include <linux/clk.h>
 
 #define USE_TIMER
 #define MV_XOR_SLOT_SIZE		64
@@ -55,6 +56,9 @@
 struct mv_xor_shared_private {
 	void __iomem	*xor_base;
 	void __iomem	*xor_high_base;
+#if defined(CONFIG_HAVE_CLK)
+	struct clk		*clk;
+#endif
 };
 
 

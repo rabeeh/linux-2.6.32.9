@@ -30,6 +30,7 @@
 #define TTB_IRGN_WT	((1 << 0) | (0 << 6))
 #define TTB_IRGN_WB	((1 << 0) | (1 << 6))
 
+
 #ifndef CONFIG_SMP
 /* PTWs cacheable, inner WB not shareable, outer WB not shareable */
 #define TTB_FLAGS	TTB_IRGN_WB|TTB_RGN_OC_WB
@@ -40,12 +41,28 @@
 #define PMD_FLAGS	PMD_SECT_WBWA|PMD_SECT_S
 #endif
 
+#ifdef CONFIG_CPU_PJ4
+#define CPU_V7_CR_TRE_REMAP_ENABLE
+#endif
+
 ENTRY(cpu_v7_proc_init)
 	mov	pc, lr
 ENDPROC(cpu_v7_proc_init)
 
 ENTRY(cpu_v7_proc_fin)
-	mov	pc, lr
+	stmfd	sp!, {lr}
+	cpsid	if				@ disable interrupts
+	bl	v7_flush_kern_cache_all
+	mrc	p15, 0, r0, c1, c0, 0		@ ctrl register
+	bic	r0, r0, #0x1000			@ ...i............
+	bic	r0, r0, #0x0006			@ .............ca.
+	mcr	p15, 0, r0, c1, c0, 0		@ disable caches
+#ifdef CONFIG_CPU_PJ4	
+	mrc	p15, 0, r0, c1, c0, 1
+	bic	r0, r0, #0x2
+	mcr	p15, 0, r0, c1, c0, 1		@ disable L2 cache
+#endif
+	ldmfd	sp!, {pc}
 ENDPROC(cpu_v7_proc_fin)
 
 /*
@@ -72,8 +89,21 @@ ENDPROC(cpu_v7_reset)
  *	IRQs are already disabled.
  */
 ENTRY(cpu_v7_do_idle)
+
 	dsb					@ WFI may enter a low-power mode
+#ifdef CONFIG_DOVE_DEBUGGER_MODE_V6
+	mov	r1, #0
+	mcr	p15, 0, r1, c7, c0, 4		@ wait for interrupt
+#else
 	wfi
+#endif
+#ifdef CONFIG_DOVE_REV_Y0
+	mrc	p15, 0, r0, c0, c0, 0		@ Main ID
+	and	r0, #0xF
+	cmp	r0, #1				@ issue the following instructions for Y0 only
+	mcreq   p15, 0, r1, c7, c5, 4           @ Prefetch Flush - ISB
+	mcreq	p15, 0, r1, c7, c10, 4		@ Sync Data barrier
+#endif
 	mov	pc, lr
 ENDPROC(cpu_v7_do_idle)
 
@@ -81,6 +111,9 @@ ENTRY(cpu_v7_dcache_clean_area)
 #ifndef TLB_CAN_READ_FROM_L1_CACHE
 	dcache_line_size r2, r3
 1:	mcr	p15, 0, r0, c7, c10, 1		@ clean D entry
+#ifndef CONFIG_MRV_PTE_IN_L2
+	mcr     p15, 1, r0, c7, c11, 1		@ clean L2C D entry
+#endif
 	add	r0, r0, r2
 	subs	r1, r1, r2
 	bhi	1b
@@ -103,10 +136,15 @@ ENTRY(cpu_v7_switch_mm)
 #ifdef CONFIG_MMU
 	mov	r2, #0
 	ldr	r1, [r1, #MM_CONTEXT_ID]	@ get mm->context.id
+#ifdef CONFIG_MRV_PTE_IN_L2 
 	orr	r0, r0, #TTB_FLAGS
+#else
+	bic     r0, r0, #0x18                   @ DONOT Cache the page table in L2
+#endif
 #ifdef CONFIG_ARM_ERRATA_430973
 	mcr	p15, 0, r2, c7, c5, 6		@ flush BTAC/BTB
 #endif
+	isb
 	mcr	p15, 0, r2, c13, c0, 1		@ set reserved context ID
 	isb
 1:	mcr	p15, 0, r0, c2, c0, 0		@ set TTB 0
@@ -127,7 +165,9 @@ ENDPROC(cpu_v7_switch_mm)
  *	- pte   - PTE value to store
  *	- ext	- value for extended PTE bits
  */
+	armv6_mt_table cpu_v7
 ENTRY(cpu_v7_set_pte_ext)
+#ifdef CPU_V7_CR_TRE_REMAP_ENABLE
 #ifdef CONFIG_MMU
  ARM(	str	r1, [r0], #-2048	)	@ linux version
  THUMB(	str	r1, [r0]		)	@ linux version
@@ -156,15 +196,33 @@ ENTRY(cpu_v7_set_pte_ext)
 	tst	r1, #L_PTE_YOUNG
 	tstne	r1, #L_PTE_PRESENT
 	moveq	r3, #0
-
 	str	r3, [r0]
 	mcr	p15, 0, r0, c7, c10, 1		@ flush_pte
+#ifndef CONFIG_MRV_PTE_IN_L2
+        mcr     p15, 1, r0, c7, c11, 1 @ clean L2C D entry
 #endif
+#endif
+#else /* CPU_V7_CR_TRE_REMAP_ENABLE */
+	/* Use TRE=0 (remap is off) scheme for full featured MMU */
+	armv6_set_pte_ext cpu_v7 
+#endif /* CPU_V7_CR_TRE_REMAP_ENABLE */
 	mov	pc, lr
+
 ENDPROC(cpu_v7_set_pte_ext)
 
 cpu_v7_name:
 	.ascii	"ARMv7 Processor"
+	.align
+
+cpu_pj4_name:
+	.ascii	"Marvell PJ4 v7 Processor"
+#ifdef CONFIG_IWMMXT
+	.ascii	"-wmmx"
+#endif
+#ifdef CONFIG_CPU_ENABLE_WRITECO
+	.ascii	"-wco"
+#endif 
+	.ascii  "\0"
 	.align
 
 	__INIT
@@ -185,12 +243,28 @@ cpu_v7_name:
  *	- cache type register is implemented
  */
 __v7_setup:
+#ifdef CONFIG_DOVE_REV_Y0
+	mrc p15, 1, r0, c15, c1, 0
+        mrc     p15, 0, r10, c0, c0, 0          @ Main ID Y0 or not
+        and     r10, #0xF
+        cmp     r10, #5
+	orrlt  	r0, r0, #(1<<15)		@ Disable VFP/WMMX dual issue
+        cmp     r10, #1
+	orrle   r0, r0, #(1<<21)		@ X0 - Enable L2 Cache Way 7-4 
+	mcr p15, 1, r0, c15, c1, 0
+#endif
 #ifdef CONFIG_SMP
 	mrc	p15, 0, r0, c1, c0, 1
 	tst	r0, #(1 << 6)			@ SMP/nAMP mode enabled?
 	orreq	r0, r0, #(1 << 6) | (1 << 0)	@ Enable SMP/nAMP mode and
 	mcreq	p15, 0, r0, c1, c0, 1		@ TLB ops broadcasting
 #endif
+#ifdef CONFIG_CPU_PJ4_PMC_ACCESS_IN_USERMODE
+	@ Enable performance counters user access
+	mrc     p15, 0, r0, c9, c14, 0
+	orr     r0, r0, #0x1
+	mcr     p15, 0, r0, c9, c14, 0
+#endif /* CONFIG_CPU_PJ4_PMC_ACCESS_IN_USERMODE */
 	adr	r12, __v7_setup_stack		@ the local stack
 	stmia	r12, {r0-r5, r7, r9, r11, lr}
 	bl	v7_flush_dcache_all
@@ -227,13 +301,43 @@ __v7_setup:
 
 2:	mov	r10, #0
 #ifdef HARVARD_CACHE
+	#ifdef CONFIG_CPU_PJ4_ERRATA_4574_4731
+	mcr	p15, 0, r10, c7, c5, 0		@ I+BTB cache invalidate
+	#endif
 	mcr	p15, 0, r10, c7, c5, 0		@ I+BTB cache invalidate
 #endif
 	dsb
 #ifdef CONFIG_MMU
 	mcr	p15, 0, r10, c8, c7, 0		@ invalidate I + D TLBs
 	mcr	p15, 0, r10, c2, c0, 2		@ TTB control register
+	dsb
+	isb
+#ifdef CONFIG_MRV_PTE_IN_L2
 	orr	r4, r4, #TTB_FLAGS
+#else
+						@ OC bits in TTB1 register
+	bic	r4, r4, #0x18                   @ DONOT Cache the page table in L2
+#endif
+#ifdef CONFIG_CPU_ENABLE_WRITECO
+						@ Refer 88SV581x-v7.Rev1.5.pdf
+	mrc	p15, 1, r0, c15, c1, 0		@ Read Marvell Extra Features Reg
+	orr	r0, r0, #0x100
+        mrc     p15, 0, r10, c0, c0, 0          @ Main ID Y0 or not
+        and     r10, #0xF
+        cmp     r10, #1
+						@ Write coalesce cycles
+						@ Only for not X0
+	orreq	r0, r0, #CONFIG_CPU_WRITECO_CYCLE << 9	@ Y0
+	mcr	p15, 1, r0, c15, c1, 0		@ Write Marvell Extra Features Reg
+	mrcne   p15, 1, r0, c15, c2, 0          @ Auxiliary Function Reg
+	bicne	r0, #0x3 << 4
+	orrne	r0, r0, #CONFIG_CPU_WRITECO_CYCLE << 4	@ X0
+	mcrne   p15, 1, r0, c15, c2, 0          @ Write Marvell Auxiliary Function Reg
+#else
+	mrc     p15, 1, r0, c15, c1, 0          @ Read Marvell Extra Features Reg
+	bic 	r0, r0, #0x100
+	mcr     p15, 1, r0, c15, c1, 0          @ Write Marvell Extra Features Reg
+#endif
 	mcr	p15, 0, r4, c2, c0, 1		@ load TTB1
 	mov	r10, #0x1f			@ domains 0, 1 = manager
 	mcr	p15, 0, r10, c3, c0, 0		@ load domain access register
@@ -267,6 +371,20 @@ __v7_setup:
 	 */
 	ldr	r5, =0xff0a81a8			@ PRRR
 	ldr	r6, =0x40e040e0			@ NMRR
+#ifdef CONFIG_CPU_ENABLE_WRITECO
+						@ FIXME: Work around for WCO
+						@ not working when TRE=1
+						@ Set write-through, noWA instead
+						@ Impact: D$ performance
+
+	mrc	p15, 0, r0, c0, c0, 0		@ Main ID
+	and	r0, #0xF
+	cmp	r0, #1
+	ldreq	r6, =0x40e840e8
+#endif
+#ifdef	CONFIG_CPU_L2WAONLY_ENABLE
+	bic	r6, r6, #0x800000
+#endif
 	mcr	p15, 0, r5, c10, c2, 0		@ write PRRR
 	mcr	p15, 0, r6, c10, c2, 1		@ write NMRR
 #endif
@@ -290,7 +408,11 @@ ENDPROC(__v7_setup)
 	 */
 	.type	v7_crval, #object
 v7_crval:
+#ifdef CPU_V7_CR_TRE_REMAP_ENABLE
 	crval	clear=0x0120c302, mmuset=0x10c03c7d, ucset=0x00c01c7c
+#else
+	crval	clear=0x0120c302, mmuset=0x00c03c7d, ucset=0x00c01c7c
+#endif
 
 __v7_setup_stack:
 	.space	4 * 11				@ 11 registers
@@ -321,6 +443,33 @@ cpu_elf_name:
 
 	.section ".proc.info.init", #alloc, #execinstr
 
+	/*
+	 * Match Marvell PJ4 v7 processor core.
+	 */
+	.type	__pj4_v7_proc_info, #object
+__pj4_v7_proc_info:
+	.long	0x560f5810		@ Marvell PJ4 ID
+	.long	0xff0ffff0		@ Mask for ID
+	.long   PMD_TYPE_SECT | \
+		PMD_SECT_AP_WRITE | \
+		PMD_SECT_AP_READ | \
+		PMD_FLAGS
+	.long   PMD_TYPE_SECT | \
+		PMD_SECT_XN | \
+		PMD_SECT_AP_WRITE | \
+		PMD_SECT_AP_READ
+	b	__v7_setup
+	.long	cpu_arch_name
+	.long	cpu_elf_name
+	.long	HWCAP_SWP|HWCAP_HALF|HWCAP_THUMB|HWCAP_FAST_MULT|HWCAP_EDSP
+	.long	cpu_pj4_name
+	.long	v7_processor_functions
+	.long	v7wbi_tlb_fns
+	.long	v6_user_fns
+	.long	v7_cache_fns
+	.size	__pj4_v7_proc_info, . - __pj4_v7_proc_info
+
+	
 	/*
 	 * Match any ARMv7 processor core.
 	 */

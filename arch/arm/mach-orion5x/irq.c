@@ -22,7 +22,6 @@
 static void gpio_irq_handler(unsigned int irq, struct irq_desc *desc)
 {
 	BUG_ON(irq < IRQ_ORION5X_GPIO_0_7 || irq > IRQ_ORION5X_GPIO_24_31);
-
 	orion_gpio_irq_handler((irq - IRQ_ORION5X_GPIO_0_7) << 3);
 }
 

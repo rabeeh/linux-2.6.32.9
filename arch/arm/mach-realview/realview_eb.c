@@ -3,6 +3,7 @@
  *
  *  Copyright (C) 2004 ARM Limited
  *  Copyright (C) 2000 Deep Blue Solutions Ltd
+ *  Ported by Peter Liao and all code is heavily based on Lennert Buytenhek MRVL 2.6.26 git
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,6 +27,7 @@
 #include <linux/amba/pl061.h>
 #include <linux/amba/mmci.h>
 #include <linux/io.h>
+#include <linux/smc911x.h>
 
 #include <mach/hardware.h>
 #include <asm/irq.h>
@@ -36,6 +38,9 @@
 #include <asm/hardware/cache-l2x0.h>
 #include <asm/localtimer.h>
 
+#ifdef CONFIG_CACHE_TAUROS2
+#include <asm/plat-orion/cache-tauros2.h>
+#endif
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
 #include <asm/mach/time.h>
@@ -259,6 +264,16 @@ static struct resource realview_eb_eth_resources[] = {
 	},
 };
 
+static struct smc911x_platdata realview_eb_smc911x_platdata = {
+	.int_polarity	= 1,
+};
+
+static struct platform_device realview_eb_eth_device = {
+	.id		= 0,
+	.num_resources	= ARRAY_SIZE(realview_eb_eth_resources),
+	.resource	= realview_eb_eth_resources,
+};
+
 /*
  * Detect and register the correct Ethernet device. RealView/EB rev D
  * platforms use the newer SMSC LAN9118 Ethernet chip
@@ -273,9 +288,15 @@ static int eth_device_register(void)
 		return -ENOMEM;
 
 	idrev = readl(eth_addr + 0x50);
-	if ((idrev & 0xFFFF0000) != 0x01180000)
-		/* SMSC LAN9118 not present, use LAN91C111 instead */
-		name = "smc91x";
+	if ((idrev & 0xFFFF0000) == 0x01180000) {
+		/* SMSC LAN9118 chip present */
+		realview_eb_eth_device.name = "smc911x";
+		realview_eb_eth_device.dev.platform_data =
+			&realview_eb_smc911x_platdata;
+	} else {
+		/* SMSC 91C111 chip present */
+		realview_eb_eth_device.name = "smc91x";
+	}
 
 	iounmap(eth_addr);
 	return realview_eth_register(name, realview_eb_eth_resources);
@@ -394,6 +415,10 @@ static void __init realview_eb_init(void)
 		l2x0_init(__io_address(REALVIEW_EB11MP_L220_BASE), 0x00790000, 0xfe000fff);
 #endif
 	}
+#ifdef CONFIG_CACHE_TAUROS2
+	tauros2_init();
+#endif
+	clk_register(&realview_clcd_clk);
 
 	realview_flash_register(&realview_eb_flash_resource, 1);
 	platform_device_register(&realview_i2c_device);

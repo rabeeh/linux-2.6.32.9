@@ -139,3 +139,8 @@ static struct xor_block_template xor_block_arm4regs = {
 		xor_speed(&xor_block_8regs);	\
 		xor_speed(&xor_block_32regs);	\
 	} while (0)
+
+
+#ifdef CONFIG_MV_RAID5_XOR_OFFLOAD
+int xor_mv(unsigned int src_no, unsigned int bytes, void **bh_ptr, void *dest_buff);
+#endif

@@ -1285,6 +1285,10 @@ fsm_start:
 			 */
 			ap->hsm_task_state = HSM_ST;
 			ata_pio_sectors(qc);
+			if ((qc->tf.flags & ATA_TFLAG_POLLING) &&
+				(qc->tf.flags & ATA_TFLAG_WRITE))
+				status = ata_wait_drq_clear(ap);
+
 		} else
 			/* send CDB */
 			atapi_send_cdb(ap, qc);
@@ -1414,6 +1418,10 @@ fsm_start:
 				status = ata_wait_idle(ap);
 				goto fsm_start;
 			}
+			if ((qc->tf.flags & ATA_TFLAG_POLLING) &&
+				(qc->tf.flags & ATA_TFLAG_WRITE))
+				status = ata_wait_drq_clear(ap);
+
 		}
 
 		poll_next = 1;

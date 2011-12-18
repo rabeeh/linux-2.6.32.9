@@ -96,6 +96,7 @@
 
 #define SDIO_PHYS_BASE		(KIRKWOOD_REGS_PHYS_BASE | 0x90000)
 
+#define I2S_PHYS_BASE		(KIRKWOOD_REGS_PHYS_BASE | 0xA0000)
 /*
  * Supported devices and revisions.
  */

@@ -9,7 +9,11 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  */
+#ifndef CONFIG_ARCH_DOVE
 #include <mach/dma.h>
+#else
+#include <asm/hardware/pxa-dma.h>
+#endif
 
 struct pxa2xx_runtime_data {
 	int dma_ch;

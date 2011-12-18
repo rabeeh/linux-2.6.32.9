@@ -81,7 +81,8 @@ config USB_GADGET_DEBUG_FS
 
 config USB_GADGET_VBUS_DRAW
 	int "Maximum VBUS Power usage (2-500 mA)"
-	range 2 500
+	range 0 500 if PLAT_ORION
+	range 2 500 if !PLAT_ORION
 	default 2
 	help
 	   Some devices need to draw power from USB when they are
@@ -508,6 +509,36 @@ config USB_LANGWELL
 #
 # LAST -- dummy/emulated controller
 #
+config USB_GADGET_AT91
+	boolean "AT91 USB Device Port"
+	depends on ARCH_AT91 && !ARCH_AT91SAM9RL && !ARCH_AT91CAP9
+	select USB_GADGET_SELECTED
+	help
+	   Many Atmel AT91 processors (such as the AT91RM2000) have a
+	   full speed USB Device Port with support for five configurable
+	   endpoints (plus endpoint zero).
+
+	   Say "y" to link the driver statically, or "m" to build a
+	   dynamically linked module called "at91_udc" and force all
+	   gadget drivers to also be dynamically linked.
+
+config USB_AT91
+	tristate
+	depends on USB_GADGET_AT91
+	default USB_GADGET
+
+config USB_GADGET_MRVL
+        boolean "Marvell USB Device Port"
+        depends on (USB=y || (USB=m && USB_GADGET=m)) && EXPERIMENTAL
+	select USB_GADGET_DUALSPEED
+        help
+	  ...
+
+config USB_MRVL
+        tristate
+        depends on USB_GADGET_MRVL
+        default USB_GADGET
+        select USB_GADGET_SELECTED
 
 config USB_GADGET_DUMMY_HCD
 	boolean "Dummy HCD (DEVELOPMENT)"
@@ -779,6 +810,48 @@ config USB_G_PRINTER
 
 	  For more information, see Documentation/usb/gadget_printer.txt
 	  which includes sample code for accessing the device file.
+
+config USB_ANDROID
+	boolean "Android Gadget"
+	depends on SWITCH
+	help
+	  The Android gadget driver supports multiple USB functions.
+	  The functions can be configured via a board file and may be
+	  enabled and disabled dynamically.
+
+config USB_ANDROID_ACM
+	boolean "Android gadget ACM serial function"
+	depends on USB_ANDROID
+	help
+	  Provides ACM serial function for android gadget driver.
+
+config USB_ANDROID_ADB
+	boolean "Android gadget adb function"
+	depends on USB_ANDROID
+	help
+	  Provides adb function for android gadget driver.
+
+config USB_ANDROID_MASS_STORAGE
+	boolean "Android gadget mass storage function"
+	depends on USB_ANDROID && SWITCH
+	help
+	  Provides USB mass storage function for android gadget driver.
+
+config USB_ANDROID_RNDIS
+	boolean "Android gadget RNDIS ethernet function"
+	depends on USB_ANDROID
+	help
+	  Provides RNDIS ethernet function for android gadget driver.
+
+config USB_ANDROID_RNDIS_WCEIS
+        boolean "Use Windows Internet Sharing Class/SubClass/Protocol"
+        depends on USB_ANDROID_RNDIS
+        help
+         Causes the driver to look like a Windows-compatible Internet
+         Sharing device, so Windows auto-detects it.
+
+         If you enable this option, the device is no longer CDC ethernet
+         compatible.
 
 config USB_CDC_COMPOSITE
 	tristate "CDC Composite Device (Ethernet and ACM)"

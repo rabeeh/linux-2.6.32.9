@@ -20,9 +20,8 @@
 #include <linux/apm_bios.h>
 #include <linux/capability.h>
 #include <linux/sched.h>
-#include <linux/suspend.h>
+#include <linux/pm.h>
 #include <linux/apm-emulation.h>
-#include <linux/freezer.h>
 #include <linux/device.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
@@ -30,8 +29,13 @@
 #include <linux/completion.h>
 #include <linux/kthread.h>
 #include <linux/delay.h>
-
+#include <linux/suspend.h>
+#include <linux/freezer.h>
 #include <asm/system.h>
+
+#if CONFIG_APM_EMU_DS2782
+#include "ds2782.h"
+#endif
 
 /*
  * The apm_bios device is one of the misc char devices.
@@ -153,14 +157,175 @@ static DEFINE_MUTEX(state_lock);
 
 static const char driver_version[] = "1.13";	/* no spaces */
 
-
-
 /*
  * Compatibility cruft until the IPAQ people move over to the new
  * interface.
  */
 static void __apm_get_power_status(struct apm_power_info *info)
 {
+#if CONFIG_APM_EMU_DS2782
+	unsigned char data;
+	unsigned char data2;
+	unsigned short regValue;
+	unsigned char status;
+//	unsigned short vol;
+	unsigned short curt;
+
+//	ds2782_reg_get(0x7e, &data, 1);
+
+//	printk("=========================================\n");
+//	printk("DS2782 addr: %#x\n", data >> 1);
+
+	ds2782_reg_get(DS2782_STATUS_REG, &status, 1);
+//	printk("DS2782 Status Reg: %#x \n", status);
+
+//	ds2782_reg_get(DS2782_VOLT_REG, &data, 1);
+//	ds2782_reg_get(DS2782_VOLT_REG+1, &data2, 1);
+//	vol = ((data << 8) | data2) >> DS2782_VOLT_SHIFT_BIT;
+//	printk("DS2782 Voltage: %#x * 4.88m  V\n", vol);
+
+//	ds2782_reg_get(DS2782_TEMP_REG, &data, 1);
+//	ds2782_reg_get(DS2782_TEMP_REG+1, &data2, 1);
+//	regValue = ((data << 8) | data2) >> DS2782_TEMP_SHIFT_BIT;
+//	printk("DS2782 Temperature: %#x * 0.125  C\n", regValue);
+
+	ds2782_reg_get(DS2782_CURRENT_REG, &data, 1);
+	ds2782_reg_get(DS2782_CURRENT_REG+1, &data2, 1);
+	curt = ((data << 8) | data2) >> DS2782_CURRENT_SHIFT_BIT;
+//	printk("DS2782 Current: %#x * 156.3u  A\n", curt);
+
+	//if(curt > 0x10 && curt < 0x4000)
+	if(curt > 0xb000)
+		info->ac_line_status = APM_AC_OFFLINE;
+	else
+		info->ac_line_status = APM_AC_ONLINE;
+//	printk("ac line status: 0x%x\n", info->ac_line_status);
+
+//	ds2782_reg_get(DS2782_ACR_REG, &data, 1);
+//	ds2782_reg_get(DS2782_ACR_REG+1, &data2, 1);
+//	regValue = ((data << 8) | data2) >> DS2782_ACR_SHIFT_BIT;
+//	printk("DS2782 Accumulated Current(ACR): %#x * 625u  Ahr\n", regValue);
+
+//	ds2782_reg_get(DS2782_IAVG_REG, &data, 1);
+//	ds2782_reg_get(DS2782_IAVG_REG+1, &data2, 1);
+//	regValue = ((data << 8) | data2) >> DS2782_IAVG_SHIFT_BIT;
+//	printk("DS2782 Average Current(IAVG): %#x * 156.25u  A\n", regValue);
+
+//	ds2782_reg_get(DS2782_AC_REG, &data, 1);
+//	ds2782_reg_get(DS2782_AC_REG+1, &data2, 1);
+//	regValue = ((data << 8) | data2) >> DS2782_AC_SHIFT_BIT;
+//	printk("DS2782 Aging Cap(AC): (%#x * 6.25)/RSNSP(mOhm)  mAhr\n", regValue);
+
+//	ds2782_reg_get(DS2782_AS_REG, &data, 1);
+//	printk("DS2782 Age Scalar(AS): %#x * 0.78 %\n", data);
+
+//	ds2782_reg_get(DS2782_RSNSP_REG, &data, 1);
+//	printk("DS2782 Sense Resistor(RSNSP): 1 / %#x  Ohm\n", data);
+
+//	ds2782_reg_get(DS2782_VCHG_REG, &data, 1);
+//	printk("DS2782 Charge Voltage(VCHG): %#x * 19.52m  V\n", data);
+
+//	ds2782_reg_get(DS2782_IMIN_REG, &data, 1);
+//	printk("DS2782 Min Chg Current(IMIN): (%#x * 50)/RSNSP(mOhm)  mA\n", data);
+
+//	ds2782_reg_get(DS2782_VAE_REG, &data, 1);
+//	printk("DS2782 Active Empty Voltage(VAE): %#x * 19.52m  V\n", data);
+
+//	ds2782_reg_get(DS2782_IAE_REG, &data, 1);
+//	printk("DS2782 Active Empty Current(IAE): (%#x * 200)/RSNSP(mOhm)  mA\n", data);
+
+//	ds2782_reg_get(DS2782_FULL40_REG, &data, 1);
+//	ds2782_reg_get(DS2782_FULL40_REG+1, &data2, 1);
+//	regValue = ((data << 8) | data2) >> DS2782_FULL40_SHIFT_BIT;
+//	printk("DS2782 FULL(40): (%#x * 6.25)/RSNSP(mOhm)  mAhr\n", regValue);
+
+//	ds2782_reg_get(DS2782_FULL_REG, &data, 1);
+//	ds2782_reg_get(DS2782_FULL_REG+1, &data2, 1);
+//	regValue = ((data << 8) | data2) >> DS2782_FULL_SHIFT_BIT;
+//	printk("DS2782 FULL(T): %#x ???  mAhr\n", regValue);
+
+//	ds2782_reg_get(DS2782_AE_REG, &data, 1);
+//	ds2782_reg_get(DS2782_AE_REG+1, &data2, 1);
+//	regValue = ((data << 8) | data2) >> DS2782_AE_SHIFT_BIT;
+//	printk("DS2782 Active Empty AE(T): %#x ???  mAhr\n", regValue);
+
+//	ds2782_reg_get(DS2782_SE_REG, &data, 1);
+//	ds2782_reg_get(DS2782_SE_REG+1, &data2, 1);
+//	regValue = ((data << 8) | data2) >> DS2782_SE_SHIFT_BIT;
+//	printk("DS2782 Standby Empty SE(T): %#x ???  mAhr\n", regValue);
+
+//	ds2782_reg_get(DS2782_RAAC_REG, &data, 1);
+//	ds2782_reg_get(DS2782_RAAC_REG+1, &data2, 1);
+//	regValue = ((data << 8) | data2) >> DS2782_RAAC_SHIFT_BIT;
+//	printk("DS2782 Remaining Active Absolute Capacity (RAAC): %#x ???  mAhr\n", regValue);
+
+//	ds2782_reg_get(DS2782_RSAC_REG, &data, 1);
+//	ds2782_reg_get(DS2782_RSAC_REG+1, &data2, 1);
+//	regValue = ((data << 8) | data2) >> DS2782_RSAC_SHIFT_BIT;
+//	printk("DS2782 Remaining Standby Absolute Capacity (RSAC): %#x ???  mAhr\n", regValue);
+
+	ds2782_reg_get(DS2782_RARC_REG, &data, 1);
+//	printk("DS2782 Remaining Active Relative Capacity (RARC): %#x %\n", data);
+	info->battery_life = data;
+
+	if(info->battery_life > 0x1e) { // 30%
+		if(info->ac_line_status == APM_AC_ONLINE) {
+			if(status & 0x80) { // charge terminate flag
+				info->battery_status = APM_BATTERY_STATUS_HIGH;
+				info->battery_flag = APM_BATTERY_FLAG_HIGH;
+			} else {
+				info->battery_status = APM_BATTERY_STATUS_CHARGING;
+				info->battery_flag = APM_BATTERY_FLAG_CHARGING;
+			}
+		} else {
+			info->battery_status = APM_BATTERY_STATUS_HIGH;
+			info->battery_flag = APM_BATTERY_FLAG_HIGH;
+		}
+	} else if((info->battery_life <= 0x1e)&& (info->battery_life > 0xf)) { // 15% ~ 30%
+		if(info->ac_line_status == APM_AC_ONLINE) {
+			if(status & 0x80) { // charge terminate flag
+				info->battery_status = APM_BATTERY_STATUS_LOW;
+				info->battery_flag = APM_BATTERY_FLAG_LOW;
+			} else {
+				info->battery_status = APM_BATTERY_STATUS_CHARGING;
+				info->battery_flag = APM_BATTERY_FLAG_CHARGING;
+			}
+		} else {
+			info->battery_status = APM_BATTERY_STATUS_LOW;
+			info->battery_flag = APM_BATTERY_FLAG_LOW;
+		}
+	} else if(info->battery_life <= 0xf) { // 0 ~ 15%
+	 	if(info->ac_line_status == APM_AC_ONLINE) {
+			if(status & 0x80) { // charge terminate flag
+				info->battery_status = APM_BATTERY_STATUS_CRITICAL;
+				info->battery_flag = APM_BATTERY_FLAG_CRITICAL;
+			} else {
+				info->battery_status = APM_BATTERY_STATUS_CHARGING;
+				info->battery_flag = APM_BATTERY_FLAG_CHARGING;
+			}
+		} else {
+			info->battery_status = APM_BATTERY_STATUS_CRITICAL;
+			info->battery_flag = APM_BATTERY_FLAG_CRITICAL;
+		}
+	}
+
+//	if(status & 0x4)
+//		ds2782_reg_set(DS2782_STATUS_REG, ~0x4);
+//	if(status & 0x2)
+//		ds2782_reg_set(DS2782_STATUS_REG, ~0x2);
+//	printk("battery status: 0x%x\n", info->battery_status);
+//	printk("battery flag: 0x%x\n", info->battery_flag);
+
+	ds2782_reg_get(DS2782_RAAC_REG, &data, 1);
+	ds2782_reg_get(DS2782_RAAC_REG+1, &data2, 1);
+	regValue = ((data << 8) | data2) >> DS2782_RAAC_SHIFT_BIT;
+
+	info->units = APM_UNITS_MINS;
+	info->time = (regValue * 10) / 670 * 6;  // Time = RAAC(mAhr) / 670m * 60min
+
+//	ds2782_reg_get(DS2782_RSRC_REG, &data, 1);
+//	printk("DS2782 Remaining Standby Relative Capacity (RSRC): %#x %\n", data);
+#endif
 }
 
 /*
@@ -269,6 +434,7 @@ static int
 apm_ioctl(struct inode * inode, struct file *filp, u_int cmd, u_long arg)
 {
 	struct apm_user *as = filp->private_data;
+	unsigned long flags;
 	int err = -EINVAL;
 
 	if (!as->suser || !as->writer)
@@ -300,8 +466,13 @@ apm_ioctl(struct inode * inode, struct file *filp, u_int cmd, u_long arg)
 			/*
 			 * Wait for the suspend/resume to complete.  If there
 			 * are pending acknowledges, we wait here for them.
+			 *
+			 * Note: we need to ensure that the PM subsystem does
+			 * not kick us out of the wait when it suspends the
+			 * threads.
 			 */
-			freezer_do_not_count();
+			flags = current->flags;
+			current->flags |= PF_NOFREEZE;
 
 			wait_event(apm_suspend_waitqueue,
 				   as->suspend_state == SUSPEND_DONE);
@@ -327,6 +498,8 @@ apm_ioctl(struct inode * inode, struct file *filp, u_int cmd, u_long arg)
 			 */
 			as->suspend_result = pm_suspend(PM_SUSPEND_MEM);
 		}
+
+		current->flags = flags;
 
 		mutex_lock(&state_lock);
 		err = as->suspend_result;
@@ -448,10 +621,11 @@ static struct miscdevice apm_device = {
  *	-1: Unknown
  *   8) min = minutes; sec = seconds
  */
-static int proc_apm_show(struct seq_file *m, void *v)
+static int apm_get_info(char *buf, char **start, off_t fpos, int length)
 {
 	struct apm_power_info info;
 	char *units;
+	int ret;
 
 	info.ac_line_status = 0xff;
 	info.battery_status = 0xff;
@@ -469,27 +643,14 @@ static int proc_apm_show(struct seq_file *m, void *v)
 	case 1: 	units = "sec";	break;
 	}
 
-	seq_printf(m, "%s 1.2 0x%02x 0x%02x 0x%02x 0x%02x %d%% %d %s\n",
+	ret = sprintf(buf, "%s 1.2 0x%02x 0x%02x 0x%02x 0x%02x %d%% %d %s\n",
 		     driver_version, APM_32_BIT_SUPPORT,
 		     info.ac_line_status, info.battery_status,
 		     info.battery_flag, info.battery_life,
 		     info.time, units);
 
-	return 0;
+	return ret;
 }
-
-static int proc_apm_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, proc_apm_show, NULL);
-}
-
-static const struct file_operations apm_proc_fops = {
-	.owner		= THIS_MODULE,
-	.open		= proc_apm_open,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= single_release,
-};
 #endif
 
 static int kapmd(void *arg)
@@ -651,6 +812,9 @@ static struct notifier_block apm_notif_block = {
 static int __init apm_init(void)
 {
 	int ret;
+#ifdef CONFIG_PROC_FS
+	struct proc_dir_entry *ent;
+#endif
 
 	if (apm_disabled) {
 		printk(KERN_NOTICE "apm: disabled on user request.\n");
@@ -663,15 +827,23 @@ static int __init apm_init(void)
 		kapmd_tsk = NULL;
 		goto out;
 	}
+	kapmd_tsk->flags |= PF_NOFREEZE;
 	wake_up_process(kapmd_tsk);
 
 #ifdef CONFIG_PROC_FS
-	proc_create("apm", 0, NULL, &apm_proc_fops);
+//	create_proc_info_entry("apm", 0, NULL, apm_get_info);
+	ent = create_proc_entry("apm", 0, NULL);
+	if (ent)
+		ent->read_proc = apm_get_info;
 #endif
 
 	ret = misc_register(&apm_device);
-	if (ret)
+	if (ret){
+#ifdef CONFIG_PROC_FS
+		remove_proc_entry("apm", NULL);
+#endif
 		goto out_stop;
+	}
 
 	ret = register_pm_notifier(&apm_notif_block);
 	if (ret)
@@ -692,8 +864,9 @@ static void __exit apm_exit(void)
 {
 	unregister_pm_notifier(&apm_notif_block);
 	misc_deregister(&apm_device);
+#ifdef CONFIG_PROC_FS
 	remove_proc_entry("apm", NULL);
-
+#endif
 	kthread_stop(kapmd_tsk);
 }
 
