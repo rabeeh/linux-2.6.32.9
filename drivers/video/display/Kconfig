@@ -40,6 +40,12 @@ config ADI9889
 	help
 	  ADI9889 device driver support.
 
+config TDA19988
+	tristate "NXP TDA19988support"
+	default n
+	help
+	  NXP TDA19988 HDMI transmitter support.
+
 config THS8200
        tristate "THS8200 support"
 
