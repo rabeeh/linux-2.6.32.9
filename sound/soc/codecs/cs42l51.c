@@ -21,10 +21,8 @@
 #define CS42L51_CACHE_SIZE (CS42L51_REG_MAX+1)
 
 
-/*
-#define CS42L51_DEBUG(format, args...) \
-	printk(KERN_DEBUG "%s(%d): "format"\n", __FUNCTION__, __LINE__, ##args)
-*/
+//#define CS42L51_DEBUG(format, args...) \
+//	printk(KERN_DEBUG "%s(%d): "format"\n", __FUNCTION__, __LINE__, ##args)
 
 #define CS42L51_DEBUG(format, args...)
 
@@ -60,7 +58,7 @@ static int cs42l51_write(struct snd_soc_codec *codec, unsigned int reg,
 	reg &= 0x7f;
 	data[0] = reg & 0xff;
 	data[1] = value & 0xff;
-
+	return 0; // Rabeeh
 	cs42l51_write_reg_cache(codec, data[0], data[1]);
 	if (codec->hw_write(codec->control_data, data, 2) == 2)
 		return 0;
@@ -70,6 +68,7 @@ static int cs42l51_write(struct snd_soc_codec *codec, unsigned int reg,
 
 static unsigned int cs42l51_read(struct snd_soc_codec *codec, unsigned int reg)
 {
+	return 0;// Rabeeh
 	return cs42l51_read_reg_cache(codec, reg);
 }
 
@@ -80,7 +79,7 @@ static unsigned int cs42l51_read_no_cache(struct snd_soc_codec *codec,
 	u8 data[2];
 	struct i2c_client *i2c_client = codec->control_data;
 	int ret;
-
+	return 0; // Rabeeh
 	i2c_client = (struct i2c_client *)codec->control_data;
 
 	data[0] = reg & 0xff;
@@ -94,7 +93,7 @@ static unsigned int cs42l51_read_no_cache(struct snd_soc_codec *codec,
 	msg[1].buf = &data[1];
 	msg[1].len = 1;
 
-	ret = i2c_transfer(i2c_client->adapter, &msg[0], 2);
+// Rabeeh	ret = i2c_transfer(i2c_client->adapter, &msg[0], 2);
 	return (ret == 2) ? data[1] : -EIO;
 }
 

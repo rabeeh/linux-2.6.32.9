@@ -784,6 +784,7 @@ struct snd_soc_dai mv88fx_i2s_dai1 = {
 	.suspend = mv88fx_i2s_suspend,
 	.resume = mv88fx_i2s_resume,
 	.ops = &mv88fx_i2s_dai_ops,
+#if 0
 	.capture = {
 		    .stream_name = "i2s-capture",
 		    .formats = (SNDRV_PCM_FMTBIT_S16_LE |
@@ -796,6 +797,7 @@ struct snd_soc_dai mv88fx_i2s_dai1 = {
 		    .channels_min = 1,
 		    .channels_max = 2,
 		    },
+#endif
 	.playback = {
 		     .stream_name = "i2s-playback",
 		     .formats = (SNDRV_PCM_FMTBIT_S16_LE |

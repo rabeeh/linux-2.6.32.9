@@ -382,7 +382,7 @@ static int mv88fx_snd_ctrl_new(struct snd_card *card)
 	    &chip->stream[SNDRV_PCM_STREAM_CAPTURE].dig_mode;
 	capture_mono_mixer.rec =
 	    &chip->stream[SNDRV_PCM_STREAM_CAPTURE].mono_mode;
-
+#if 0
 	if (chip->pdata->i2s_play && chip->pdata->spdif_play) {
 		err =
 		    snd_ctl_add(card,
@@ -418,7 +418,7 @@ static int mv88fx_snd_ctrl_new(struct snd_card *card)
 		if (err < 0)
 			return err;
 	}
-
+#endif
 	if (chip->pdata->spdif_play) {
 		err = snd_ctl_add(card, snd_ctl_new1(&mv88fx_snd_spdif_mask,
 						     chip));
@@ -659,9 +659,10 @@ static struct platform_driver mv88fx_snd_driver = {
 
 static int __init mv88fx_snd_init(void)
 {
+#if 0 // Rabeeh - add the new machine
 	if (!machine_is_dove_db() && !machine_is_dove_db_z0() && !machine_is_videoplug() && !machine_is_dove_db_b())
 		return -ENODEV;
-
+#endif
 	mv88fx_snd_debug("");
 	return platform_driver_register(&mv88fx_snd_driver);
 }
