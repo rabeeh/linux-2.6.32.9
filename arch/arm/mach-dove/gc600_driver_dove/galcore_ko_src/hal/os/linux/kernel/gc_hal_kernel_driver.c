@@ -59,10 +59,17 @@ struct class *gpuClass;
 static int major = 199;
 module_param(major, int, 0644);
 
+#ifdef CONFIG_MACH_CUBOX
+int irqLine = 42;
+long registerMemBase = 0xf1840000;
+ulong contiguousBase = 0x8000000;
+#else
 int irqLine = 8;
+long registerMemBase = 0xc0400000;
+ulong contiguousBase = 0;
+#endif
 module_param(irqLine, int, 0644);
 
-long registerMemBase = 0xc0400000;
 module_param(registerMemBase, long, 0644);
 
 ulong registerMemSize = 256 << 10;
@@ -71,7 +78,6 @@ module_param(registerMemSize, ulong, 0644);
 long contiguousSize = 32 << 20;
 module_param(contiguousSize, long, 0644);
 
-ulong contiguousBase = 0;
 module_param(contiguousBase, ulong, 0644);
 
 long bankSize = 32 << 20;
@@ -904,7 +910,11 @@ static int drv_mmap(struct file * filp, struct vm_area_struct * vma)
         return -ENOTTY;
     }
 
+#ifdef CONFIG_MACH_CUBOX
+    vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
+#else
     vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+#endif
     vma->vm_flags    |= VM_IO | VM_DONTCOPY | VM_DONTEXPAND;
     vma->vm_pgoff     = 0;
 

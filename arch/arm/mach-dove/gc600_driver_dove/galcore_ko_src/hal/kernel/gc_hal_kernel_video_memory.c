@@ -667,7 +667,7 @@ gckVIDMEM_Destroy(
 **			Pointer to a variable that will hold the allocated memory node.
 */
 
-#define MRVL_DEBUG_VMEM
+#undef MRVL_DEBUG_VMEM
 
 #ifdef MRVL_DEBUG_VMEM
 #include <linux/module.h>
