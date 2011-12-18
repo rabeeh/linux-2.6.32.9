@@ -332,6 +332,8 @@ void mmc_set_data_timeout(struct mmc_data *data, const struct mmc_card *card)
 				data->timeout_ns =  100000000;	/* 100ms */
 		}
 	}
+	/* Ugly hack - Some sill SD cards requires more than 300mSec to write */
+	data->timeout_ns *= 10;
 }
 EXPORT_SYMBOL(mmc_set_data_timeout);
 
