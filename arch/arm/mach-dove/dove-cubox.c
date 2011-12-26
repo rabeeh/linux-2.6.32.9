@@ -223,7 +223,7 @@ static struct mv643xx_eth_platform_data dove_cubox_ge00_data = {
 /*****************************************************************************
  * SATA
  ****************************************************************************/
-static struct mv_sata_platform_data dove_cubox = {
+static struct mv_sata_platform_data dove_cubox_sata = {
         .n_ports        = 1,
 };
 
@@ -484,7 +484,7 @@ static void __init dove_cubox_init(void)
 	ds_clks_disable_all(1, 1); // Disable PCI-E 1 and 2 too
 #endif
 	// Rabeeh - limit to SATA gen 1
-	dove_sata_init(&dove_cubox);
+	dove_sata_init(&dove_cubox_sata);
 	dove_spi0_init(0);
 	/* dove_spi1_init(1); */
 
