@@ -2306,7 +2306,6 @@ tmbslTDA9989SetAudioPortConfig
     /* Check parameters */
     RETIF_BADPARAM(pEnaAudioPortTable == Null)
     RETIF_BADPARAM(pGndAudioPortTable == Null)
-	printk ("Rabeeh - setting hw reg to 0x%x\n",pEnaAudioPortTable[0]);
     err = setHwRegister(pDis,
                         E_REG_P00_ENA_AP_RW,
                         pEnaAudioPortTable[0]);
@@ -2341,7 +2340,6 @@ tmbslTDA9989SetAudioClockPortConfig
     /* Check parameters */
     RETIF_BADPARAM(pEnaAudioClockPortTable == Null)
     RETIF_BADPARAM(pGndAudioClockPortTable == Null)
-    printk ("Rabeeh - setting enable clock portable to 0x%x\n",pEnaAudioClockPortTable[0]);
     err = setHwRegister(pDis,
                         E_REG_P00_ENA_ACLK_RW,
                         pEnaAudioClockPortTable[0]);
