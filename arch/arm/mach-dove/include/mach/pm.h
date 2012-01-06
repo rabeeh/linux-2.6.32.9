@@ -35,6 +35,10 @@
 #define PMU_INTERRUPT_CAUSE	(DOVE_PMU_VIRT_BASE + 0x50)
 #define PMU_INTERRUPT_MASK	(DOVE_PMU_VIRT_BASE + 0x54)
 
+#define IO_PWR_CTRL		(DOVE_PMU_VIRT_BASE + 0x58)
+#define IO_PWR_CTRL_PCIE_PHY0		(1 << 16)
+#define IO_PWR_CTRL_PCIE_PHY1		(1 << 17)
+
 static inline int pmu_to_irq(int pin)
 {
 	if (pin < NR_PMU_IRQS)

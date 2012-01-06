@@ -31,6 +31,7 @@
 void ds_clks_disable_all(int include_pci0, int include_pci1)
 {
 	u32 ctrl = readl(CLOCK_GATING_CONTROL);
+	u32 io_pwr = readl(IO_PWR_CTRL);
 	
 	ctrl &= ~(CLOCK_GATING_USB0_MASK |
 		  CLOCK_GATING_USB1_MASK |
@@ -55,13 +56,18 @@ void ds_clks_disable_all(int include_pci0, int include_pci1)
 		  CLOCK_GATING_XOR1_MASK
 		);
 
-	if (include_pci0)
+	if (include_pci0) {
 		ctrl &= ~CLOCK_GATING_PCIE0_MASK;
-
-	if (include_pci1)
+		io_pwr |= IO_PWR_CTRL_PCIE_PHY0;
+	}
+	
+	if (include_pci1) {
 		ctrl &= ~CLOCK_GATING_PCIE1_MASK;
+		io_pwr |= IO_PWR_CTRL_PCIE_PHY1;
+	}
 
 	writel(ctrl, CLOCK_GATING_CONTROL);
+	writel(io_pwr, IO_PWR_CTRL);
 }
 
 static void __ds_clk_enable(struct clk *clk)
