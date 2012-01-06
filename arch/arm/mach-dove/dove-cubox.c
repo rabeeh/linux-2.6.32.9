@@ -225,6 +225,7 @@ static struct mv643xx_eth_platform_data dove_cubox_ge00_data = {
  ****************************************************************************/
 static struct mv_sata_platform_data dove_cubox_sata = {
         .n_ports        = 1,
+	.shutdown_on_disconnected = 1,
 };
 
 
@@ -346,19 +347,17 @@ static struct dove_mpp_mode dove_cubox_mpp_modes[] __initdata = {
 
 static void dove_cubox_gpio_init(u32 rev)
 {
-#if 1	
 	orion_gpio_set_valid(19, 1);
 	if (gpio_request(19, "IR_Receive" ) != 0)
 		printk(KERN_ERR "Dove: failed to setup GPIO for GPIO for Expansionn\n");
 	gpio_direction_input(19);
-#endif	
-  	  orion_gpio_set_valid(27, 1);
+	orion_gpio_set_valid(27, 1);
 	orion_gpio_set_valid(34, 1);
 	if (gpio_request(34, "MPP34n" ) != 0)
 		printk(KERN_ERR "Dove: failed to setup GPIO for GPIO for Expansionn\n");
 	gpio_direction_input(34);		/* GPIO for Expansion   */
   
-    	  orion_gpio_set_valid(35, 1);
+	orion_gpio_set_valid(35, 1);
 	if (gpio_request(35, "MPP35n" ) != 0)
 		printk(KERN_ERR "Dove: failed to setup GPIO for GPIO for Expansionn\n");
 	gpio_direction_input(35);		/* GPIO for Expansion   */
@@ -478,11 +477,8 @@ static void __init dove_cubox_init(void)
 	/* ehci init functions access the usb port, only now it's safe to disable
 	 * all clocks
 	 */
-#if 1
-	ds_clks_disable_all(0, 0);
-#else
-	ds_clks_disable_all(1, 1); // Disable PCI-E 1 and 2 too
-#endif
+	/* TODO - Fixme - need to disable pci-e 0 too */
+	ds_clks_disable_all(0, 1);
 	// Rabeeh - limit to SATA gen 1
 	dove_sata_init(&dove_cubox_sata);
 	dove_spi0_init(0);

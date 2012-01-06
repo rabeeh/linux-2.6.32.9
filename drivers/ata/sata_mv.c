@@ -562,6 +562,8 @@ struct mv_host_priv {
 	struct dma_pool		*crqb_pool;
 	struct dma_pool		*crpb_pool;
 	struct dma_pool		*sg_tbl_pool;
+	int			force_gen1;
+	int			shutdown_on_disconnected;
 };
 
 struct mv_hw_ops {
@@ -3489,13 +3491,15 @@ static bool soc_is_65n(struct mv_host_priv *hpriv)
 	return false;
 }
 
-static void mv_setup_ifcfg(void __iomem *port_mmio, int want_gen2i)
+static void mv_setup_ifcfg(void __iomem *port_mmio, int want_gen2i, int shutdown)
 {
 	u32 ifcfg = readl(port_mmio + SATA_IFCFG);
 
 	ifcfg = (ifcfg & 0xf7f) | 0x9b1000;	/* from chip spec */
 	if (want_gen2i)
 		ifcfg |= (1 << 7);		/* enable gen2i speed */
+	if (shutdown)
+		ifcfg |= (1 << 9);
 	writelfl(ifcfg, port_mmio + SATA_IFCFG);
 }
 
@@ -3514,7 +3518,7 @@ static void mv_reset_channel(struct mv_host_priv *hpriv, void __iomem *mmio,
 
 	if (!IS_GEN_I(hpriv)) {
 		/* Enable 3.0gb/s link speed: this survives EDMA_RESET */
-		mv_setup_ifcfg(port_mmio, 1);
+		mv_setup_ifcfg(port_mmio, hpriv->force_gen1 ? 0 : 1, 0);
 	}
 	/*
 	 * Strobing EDMA_RESET here causes a hard reset of the SATA transport,
@@ -3588,13 +3592,15 @@ static int mv_hardreset(struct ata_link *link, unsigned int *class,
 		sata_scr_read(link, SCR_STATUS, &sstatus);
 		if (!IS_GEN_I(hpriv) && ++attempts >= 5 && sstatus == 0x121) {
 			/* Force 1.5gb/s link speed and try again */
-			mv_setup_ifcfg(mv_ap_base(ap), 0);
+			mv_setup_ifcfg(mv_ap_base(ap), 0, 0);
 			if (time_after(jiffies + HZ, deadline))
 				extra = HZ; /* only extend it once, max */
 		}
 	} while (sstatus != 0x0 && sstatus != 0x113 && sstatus != 0x123);
 	mv_save_cached_regs(ap);
 	mv_edma_cfg(ap, 0, 0);
+	if (hpriv->shutdown_on_disconnected)
+		mv_setup_ifcfg(mv_ap_base(ap), 1, 1);
 
 	return rc;
 }
@@ -4033,6 +4039,8 @@ static int mv_platform_probe(struct platform_device *pdev)
 	host->private_data = hpriv;
 	hpriv->n_ports = n_ports;
 	hpriv->board_idx = chip_soc;
+	hpriv->force_gen1 = mv_platform_data->force_gen1;
+	hpriv->shutdown_on_disconnected = mv_platform_data->shutdown_on_disconnected;
 
 	host->iomap = NULL;
 	hpriv->base = devm_ioremap(&pdev->dev, res->start,

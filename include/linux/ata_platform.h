@@ -32,6 +32,8 @@ struct mbus_dram_target_info;
 struct mv_sata_platform_data {
 	struct mbus_dram_target_info	*dram;
 	int	n_ports; /* number of sata ports */
+	int	force_gen1;
+	int	shutdown_on_disconnected;
 };
 
 #endif /* __LINUX_ATA_PLATFORM_H */
