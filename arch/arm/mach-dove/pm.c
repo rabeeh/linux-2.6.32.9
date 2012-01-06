@@ -19,6 +19,7 @@
 #include <linux/suspend.h>
 #include <linux/interrupt.h>
 #include <linux/fb.h>
+#include <linux/gpio.h>
 #include <asm/hardware/cache-tauros2.h>
 #include <asm/mach/arch.h>
 #include <asm-arm/vfp.h>
@@ -151,6 +152,7 @@ int pmu_proc_write(struct file *file, const char *buffer,unsigned long count,
 	if(!strncmp(buffer+len, str,strlen(str))) {
 		unsigned int sb,nb;
 		printk ("Powering off system\n");
+		gpio_direction_output(1, 0); /* Disable external USB current limiter */
 		sb = ioremap(0xf1000000,0x00100000);
 		if (!sb) {
 			printk ("Can't remap sb registers\n");
