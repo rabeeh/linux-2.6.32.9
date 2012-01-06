@@ -179,7 +179,7 @@ static int __init noL2_setup(char *__unused)
 
 __setup("noL2", noL2_setup);
 
-int pm_disable = 0;
+int pm_disable = 1;
 static int __init pm_disable_setup(char *__unused)
 {
      pm_disable = 1;
