@@ -29,8 +29,14 @@
 #include <linux/list.h>
 #include <linux/platform_device.h>
 #include <linux/cpu.h>
+#include <linux/gpio.h>
 #include <asm/io.h>
+#include "mvOs.h"
+#include "pmu/mvPmu.h"
 #include "pmu/mvPmuRegs.h"
+#include "gpp/mvGppRegs.h"
+#include "ctrlEnv/mvCtrlEnvSpec.h"
+#include "ctrlEnv/sys/mvCpuIfRegs.h"
 
 #define DOVE_OVERHEAT_TEMP	105000		/* milidegree Celsius */
 #define DOVE_OVERHEAT_DELAY	0x700
@@ -47,6 +53,25 @@
 #define DOVE_TSEN_RAW2VOLT(x)  (((x) + 241)*100000/39619)
 
 #define LABEL "T-junction"
+
+/*
+ * Implement hysteresis like temperature up and down.
+ * When die junction temperature reaches LIMIT1_UP set warning and start
+ * lowering it by decreasing CPU frequency.
+ * When temperature reaches LIMIT1_DOWN then get CPU back to max speed.
+ * LIMIT_SHUTDOWN is hard limit to minimize power consumption by shutting down
+ * as much as possible.
+ * Those temperatures are all die junction temperatures. Ambient should be much
+ * less than those (typically 50-60c).
+ */
+#define LIMIT1_UP		105000 /* 100c */
+#define LIMIT1_DOWN		95000  /* 90c */
+#define LIMIT_SHUTDOWN		120000 /* 120c */
+
+/* External functions used for power management */
+extern MV_STATUS mvPmuCpuFreqScale (MV_PMU_CPU_SPEED cpuSpeed);
+extern MV_VOID mvPmuSramDeepIdle(MV_U32 ddrSelfRefresh);
+
 static struct device *hwmon_dev;
 unsigned int temp_min = DOVE_OVERCOOL_TEMP;
 unsigned int temp_max = DOVE_OVERHEAT_TEMP;
@@ -55,6 +80,7 @@ unsigned int temp_max = DOVE_OVERHEAT_TEMP;
 #define SENSOR_VOLT_CPU 2
 #define SENSOR_VOLT_CORE 3
 static int current_mode = 0;
+static struct timer_list thermal_check;
 
 typedef enum { 
 	SHOW_TEMP, 
@@ -240,6 +266,93 @@ static int dovetemp_read_volt(int mode)
 	return DOVE_TSEN_RAW2VOLT(reg);
 }
 
+static void local_cpu_freq_scale(MV_PMU_CPU_SPEED speed)
+{
+	MV_STATUS stat;
+	unsigned long ints;
+	u32 mc;
+	local_irq_save(ints);
+	mc = MV_REG_READ(CPU_MAIN_IRQ_MASK_HIGH_REG);
+	MV_REG_WRITE(CPU_MAIN_IRQ_MASK_HIGH_REG, (mc | 0x2));
+	stat = mvPmuCpuFreqScale (speed);
+	MV_REG_WRITE(CPU_MAIN_IRQ_MASK_HIGH_REG, mc);
+	local_irq_restore(ints);
+}
+/* Thermal check routine */
+static inline void dovetemp_checktemp(unsigned long data)
+{
+	static int warning_flag = 0;
+	int temp = dovetemp_read_temp();
+	u32 mc, mc2, reg;
+	unsigned long ints;
+	if (temp >= LIMIT_SHUTDOWN) {
+		/* Shutdown as much as possible */
+		printk (KERN_CRIT "Reached maximum thermal allowed. Shutting down\n");
+		local_irq_save(ints);
+		gpio_direction_output(1, 0); /* Disable external USB current limiter */
+		local_cpu_freq_scale(CPU_CLOCK_SLOW);
+		MV_REG_WRITE (0x0a2050, 0x009B1215); /* eSata - 40mA */
+		MV_REG_WRITE (0x0d0058, 0x0003007f); /* PEX clk - 10mA */
+		MV_REG_WRITE (0x072004, 0x00010800); /* SMI power down phy - ~20mA */
+		msleep(100);
+		MV_REG_WRITE (0x0720b0, 0x00000002); /* gigE digital part */
+		MV_REG_WRITE (0x0d0058, 0x0003007f); /* PEX clk + gig I/Os - 10mA */
+		/* disable GPU isolators */
+		reg = MV_REG_READ(PMU_ISO_CTRL_REG);
+		reg &= ~PMU_ISO_GPU_MASK;
+		MV_REG_WRITE(PMU_ISO_CTRL_REG, reg);
+		/* reset GPU unit */
+		reg = MV_REG_READ(PMU_SW_RST_CTRL_REG);
+		reg &= ~PMU_SW_RST_GPU_MASK;
+		MV_REG_WRITE(PMU_SW_RST_CTRL_REG, reg);
+		/* power off */
+		reg = MV_REG_READ(PMU_PWR_SUPLY_CTRL_REG);
+		reg |= PMU_PWR_GPU_PWR_DWN_MASK;
+		MV_REG_WRITE(PMU_PWR_SUPLY_CTRL_REG, reg);
+		reg = MV_REG_READ(0x0d0208);
+		reg &= ~0xf00;
+		reg |= 0x100; /* Set PWM GPIO to no-select */
+		MV_REG_WRITE(0x0d0208, reg);
+		reg = MV_REG_READ(0x0d0400);
+		reg |= (1 << 18);
+		MV_REG_WRITE(0x0d0400, reg);
+		MV_REG_WRITE (0x050400, 0xff000160); /* USB 0 phy shutdown */
+		MV_REG_WRITE (0x050400, 0xff000160); /* USB 1 phy shutdown */
+		MV_REG_WRITE (0x0d0038, 0xff3800c4); /* Clock gating of unused south bridge */
+		// Disable all interrupts besides uart0
+		mc = MV_REG_READ(CPU_MAIN_IRQ_MASK_REG);
+		mc2 = MV_REG_READ(CPU_MAIN_IRQ_MASK_HIGH_REG);
+		MV_REG_WRITE(CPU_MAIN_IRQ_MASK_REG, 0x80); /* disable all interrupts except UART0 */
+		MV_REG_WRITE(CPU_MAIN_IRQ_MASK_HIGH_REG, 0x0);
+		printk (KERN_CRIT "Just before entering deep sleep\n");
+		/* The following will put DDR in self-refresh mode */
+		mvPmuSramDeepIdle(0);
+		__asm__ __volatile__("wfi\n");
+		/* Should never reach here */
+		panic("Should never reach here function %s line %d\n",
+			__FUNCTION__,__LINE__);
+		local_irq_restore(ints);
+	}
+	if (temp >= LIMIT1_UP && !warning_flag) {
+		warning_flag = 1;
+		printk (KERN_WARNING "Die temperature exceeded limit (%d mili C)\n",
+			temp);
+		/* Limit CPU speed to DDR speed */
+		local_cpu_freq_scale (CPU_CLOCK_SLOW);
+	}
+	if (temp <= LIMIT1_DOWN && warning_flag) {
+		warning_flag = 0;
+		printk (KERN_INFO "Die temperature went below limit (%d mili C)\n",
+			temp);
+		/* Remove CPU speed limit */
+		local_cpu_freq_scale (CPU_CLOCK_TURBO);
+	}
+	if (warning_flag) {
+		/* Make sure external frequency scaling didn't change CPU freq */
+		local_cpu_freq_scale (CPU_CLOCK_SLOW);
+	}
+	mod_timer(&thermal_check, jiffies + (HZ));
+}
 /*
  * Sysfs stuff
  */
@@ -405,6 +518,11 @@ static int __devinit dovetemp_probe(struct platform_device *pdev)
 	}
 
 	printk(KERN_INFO "Dove hwmon thermal sensor initialized.\n");
+	init_timer(&thermal_check);
+	thermal_check.data = 0;
+	thermal_check.function = dovetemp_checktemp;
+	thermal_check.expires = jiffies + (HZ);
+	add_timer(&thermal_check);
 
 	return 0;
 
