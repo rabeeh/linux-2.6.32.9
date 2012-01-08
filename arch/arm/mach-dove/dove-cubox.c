@@ -347,6 +347,8 @@ static struct dove_mpp_mode dove_cubox_mpp_modes[] __initdata = {
 
 static void dove_cubox_gpio_init(u32 rev)
 {
+	orion_gpio_set_valid(12, 1);
+	gpio_direction_input(12);
 	orion_gpio_set_valid(19, 1);
 	if (gpio_request(19, "IR_Receive" ) != 0)
 		printk(KERN_ERR "Dove: failed to setup GPIO for GPIO for Expansionn\n");
