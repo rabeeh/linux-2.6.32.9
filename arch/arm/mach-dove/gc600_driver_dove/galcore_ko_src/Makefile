@@ -37,8 +37,6 @@ OS_KERNEL_DIR   := hal/os/linux/kernel
 ARCH_KERNEL_DIR := arch/$(notdir $(AQARCH))/hal/kernel
 HAL_KERNEL_DIR  := hal/kernel
 
-EXTRA_CFLAGS += -Werror
-
 OBJS := $(OS_KERNEL_DIR)/gc_hal_kernel_debug.o \
         $(OS_KERNEL_DIR)/gc_hal_kernel_device.o \
         $(OS_KERNEL_DIR)/gc_hal_kernel_driver.o \
